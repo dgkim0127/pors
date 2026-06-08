@@ -1,0 +1,24 @@
+{
+  "name": "피어싱 계산",
+  "short_name": "피어싱 계산",
+  "description": "거래처 할인, VAT, A4 반쪽 영수증 출력을 지원하는 피어싱 계산 PWA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f0",
+  "theme_color": "#10231f",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

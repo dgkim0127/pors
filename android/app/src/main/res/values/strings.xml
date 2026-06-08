@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">피어싱 포스기</string>
+    <string name="title_activity_main">피어싱 포스기</string>
+    <string name="package_name">com.piercingpos.app</string>
+    <string name="custom_url_scheme">com.piercingpos.app</string>
+</resources>

@@ -1,0 +1,3 @@
+window.PIERCE_SUPABASE_URL = "";
+window.PIERCE_SUPABASE_ANON_KEY = "";
+window.PIERCE_ADMIN_KEY = "0000";
