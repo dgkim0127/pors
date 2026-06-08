@@ -8,6 +8,16 @@ The POS app remains a tablet APK app.
 The Noblesse website remains a B2B catalog and admin system.
 The goal is data connection, not UI merging.
 
+Goals:
+- buyer purchase frequency analysis
+- buyer purchase amount analysis
+- average purchase amount
+- latest purchase date
+- repeat interval
+- purchased product analysis
+- product quantity change over time
+- inactive buyer detection
+
 ## 2. Firebase Project
 
 Known Firebase project:
@@ -20,7 +30,7 @@ Current repository findings:
 - Built/static copy with the same Firestore logic: `public/standalone.js`
 - Firebase SDK loading: `index.html` uses Firebase compat scripts from `www.gstatic.com`
 - Firebase code exists in this repository: yes
-- Current `main` includes Firebase sync code: yes, based on the code inspected in this branch created from `origin/main`
+- Current branch includes the production Firebase sync code: yes, based on the code inspected in `codex/app-firebase-data-map`, which was created from `origin/main`
 
 The app uses the browser Firebase compat API:
 - `window.firebase.initializeApp(config)`
@@ -85,6 +95,13 @@ Observed `totals` fields:
 - `total`
 
 Some receipt and settlement code also reads `totals.shippingFee`, but current sale creation stores `shippingFee` at sale root and does not add it to `totals`.
+
+Date, amount, and quantity fields for analytics:
+- Date field: `sales.createdAt`
+- Buyer fields: `sales.customerId`, `sales.customerName`
+- Amount fields: `sales.totals.subtotal`, `sales.totals.discount`, `sales.totals.supply`, `sales.totals.vat`, `sales.totals.total`
+- Quantity field: `sales.lines[].quantity`
+- Product fields: `sales.lines[].itemId`, `sales.lines[].name`, `sales.lines[].categoryId`
 
 Fields from the expected list that differ:
 - `saleId` is stored as `id`.
