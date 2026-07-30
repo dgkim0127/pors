@@ -3521,6 +3521,654 @@ body.native-printing .receipt-preview-page .receipt {
   }
 }
 
+.online-quotes-unavailable,
+.online-quotes-auth,
+.online-quotes-loading {
+  width: min(1500px, calc(100vw - 32px));
+  min-height: 420px;
+  margin: 10px auto 24px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.online-quotes-unavailable,
+.online-quotes-loading {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 900;
+}
+
+.online-quotes-auth {
+  display: grid;
+  place-items: center;
+}
+
+.online-quotes-auth__panel {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 14px;
+}
+
+.online-quotes-auth__panel h2,
+.online-quotes-heading h2,
+.online-quote-detail__header h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.online-quotes-auth__panel p,
+.online-quotes-heading p,
+.online-quote-detail__header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.online-quotes-eyebrow {
+  margin: 0;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.online-quotes-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(185, 56, 98, 0.3);
+  border-radius: 8px;
+  background: #fff5f8;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.online-quotes-primary,
+.online-quotes-secondary,
+.online-quote-back,
+.online-quote-item button,
+.online-quote-action-bar button {
+  min-height: 44px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 900;
+}
+
+.online-quotes-secondary,
+.online-quote-back,
+.online-quote-item button {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.online-quotes-list,
+.online-quote-detail {
+  width: min(1500px, calc(100vw - 32px));
+  min-width: 0;
+  margin: 0 auto;
+  padding: 10px 0 calc(96px + var(--safe-bottom));
+}
+
+.online-quotes-heading,
+.online-quote-detail__header {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.online-quotes-heading__actions,
+.online-quote-detail__header > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.online-quotes-offline {
+  margin-bottom: 12px;
+  padding: 11px 14px;
+  border: 1px solid #d8c48c;
+  border-radius: 8px;
+  background: #fff9e8;
+  color: #765a10;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.online-quotes-list__rows {
+  display: grid;
+  gap: 8px;
+}
+
+.online-quote-list-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto auto auto;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  min-height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+}
+
+.online-quote-list-row:hover {
+  border-color: var(--green);
+  box-shadow: 0 8px 22px rgba(16, 35, 31, 0.08);
+}
+
+.online-quote-list-row__main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.online-quote-list-row__main strong,
+.online-quote-list-row__main span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.online-quote-list-row__main span,
+.online-quote-list-row small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.online-quote-list-row b {
+  white-space: nowrap;
+}
+
+.online-quote-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0 9px;
+  background: #edf6f0;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.online-quotes-empty {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  text-align: center;
+  font-weight: 900;
+}
+
+.online-quote-detail__header {
+  align-items: flex-start;
+}
+
+.online-quote-back {
+  flex: 0 0 auto;
+  padding: 0 12px;
+}
+
+.online-quote-detail__items {
+  display: grid;
+  gap: 10px;
+}
+
+.online-quote-item,
+.online-quote-price-summary,
+.online-quote-extra {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.online-quote-item {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.25fr) minmax(230px, 0.8fr) minmax(260px, 0.9fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.online-quote-item__product {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-content: start;
+  gap: 12px;
+}
+
+.online-quote-item__product img,
+.online-quote-item__placeholder {
+  width: 96px;
+  height: 96px;
+  grid-row: 1 / span 3;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f2eee5;
+  object-fit: cover;
+}
+
+.online-quote-item__placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.online-quote-item__product h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.online-quote-item__product > div > small,
+.online-quote-item__product > small {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.online-quote-options {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 6px 0 0;
+}
+
+.online-quote-options dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.online-quote-options dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.online-quote-item__picking,
+.online-quote-item__price {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.online-quote-item__picking h4,
+.online-quote-item__price h4,
+.online-quote-price-summary h3,
+.online-quote-extra summary {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.online-quote-quantity-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.online-quote-quantity-summary span {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f0eee9;
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.online-quote-quantity-summary b {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.online-quote-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.online-quote-field input,
+.online-quote-field select,
+.online-quote-field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.online-quote-field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.online-quote-quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.online-quote-item button {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.online-quote-item button:last-child {
+  color: var(--accent-strong);
+}
+
+.online-quote-mapping {
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: #edf6f0;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.online-quote-mapping--missing {
+  background: #fff7e6;
+  color: #8b6100;
+}
+
+.online-quote-price-summary,
+.online-quote-extra {
+  margin-top: 10px;
+  padding: 16px;
+}
+
+.online-quote-price-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.5fr);
+  gap: 18px;
+}
+
+.online-quote-price-summary dl {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.online-quote-price-summary dt {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.online-quote-price-summary dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.online-quote-price-summary__total {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--accent-strong);
+  font-size: 20px;
+}
+
+.online-quote-extra summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.online-quote-extra__body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.online-quote-permanent-discount {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.online-quote-action-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 70;
+  transform: translateX(-50%);
+  width: min(1500px, calc(100vw - 32px));
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px max(12px, env(safe-area-inset-right)) calc(10px + var(--safe-bottom)) max(12px, env(safe-area-inset-left));
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: rgba(255, 253, 247, 0.97);
+  box-shadow: 0 -10px 30px rgba(16, 35, 31, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.online-quote-action-bar button:last-child {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+@media (max-width: 1000px) {
+  .online-quote-item {
+    grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+  }
+
+  .online-quote-item__price {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  .online-quote-item__price h4,
+  .online-quote-mapping {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .online-quotes-unavailable,
+  .online-quotes-auth,
+  .online-quotes-loading,
+  .online-quotes-list,
+  .online-quote-detail {
+    width: calc(100vw - 16px);
+  }
+
+  .online-quotes-unavailable,
+  .online-quotes-auth,
+  .online-quotes-loading {
+    min-height: 320px;
+    margin-top: 8px;
+    padding: 18px;
+  }
+
+  .online-quotes-list,
+  .online-quote-detail {
+    padding-top: 8px;
+    padding-bottom: calc(154px + var(--safe-bottom));
+  }
+
+  .online-quotes-heading,
+  .online-quote-detail__header {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .online-quotes-heading__actions,
+  .online-quote-detail__header > div:last-child {
+    justify-content: stretch;
+  }
+
+  .online-quotes-heading__actions button,
+  .online-quote-detail__header > div:last-child button {
+    flex: 1 1 120px;
+  }
+
+  .online-quote-list-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    min-height: 88px;
+    padding: 12px;
+  }
+
+  .online-quote-list-row > small {
+    grid-column: 1;
+  }
+
+  .online-quote-list-row > b {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .online-quote-status {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .online-quote-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .online-quote-item__product,
+  .online-quote-item__picking,
+  .online-quote-item__price {
+    grid-column: 1;
+  }
+
+  .online-quote-item__product {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .online-quote-item__product img,
+  .online-quote-item__placeholder {
+    width: 82px;
+    height: 82px;
+  }
+
+  .online-quote-item__picking,
+  .online-quote-item__price {
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  .online-quote-item__price {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-quote-item__price h4,
+  .online-quote-mapping {
+    grid-column: 1;
+  }
+
+  .online-quote-price-summary {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .online-quote-extra {
+    padding: 0 14px 14px;
+  }
+
+  .online-quote-extra__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-quote-permanent-discount {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-quote-action-bar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .online-quote-action-bar button:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 380px) {
+  .online-quote-quick-actions,
+  .online-quote-action-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .online-quote-action-bar button:last-child {
+    grid-column: 1;
+  }
+
+  .online-quote-detail {
+    padding-bottom: calc(206px + var(--safe-bottom));
+  }
+}
+
 @media print {
   @page { size: A4 landscape; margin: 0; }
   body { background: #fff; }

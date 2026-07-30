@@ -8,7 +8,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node tests/calculations.test.mjs",
+    "test": "node tests/calculations.test.mjs && node tests/online-quotes.test.mjs",
     "verify": "npm run test && npm run build",
     "android:add": "npm run build && npx cap add android",
     "android:sync": "npm run build && npx cap sync android",

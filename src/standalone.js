@@ -1369,6 +1369,16 @@
       setSaveNotice({ type: type, message: message });
     }
 
+    function updateOnlineQuoteCustomer(customerId, patch) {
+      setState(function (current) {
+        return Object.assign({}, current, {
+          customers: (current.customers || []).map(function (entry) {
+            return entry.id === customerId ? Object.assign({}, entry, patch) : entry;
+          })
+        });
+      });
+    }
+
     function cloudStatusText() {
       if (!online) return "오프라인 · 이 기기에 임시 저장";
       if (cloudStatus === "saving") return "Firebase 저장 중";
@@ -1519,6 +1529,7 @@
 
     var categories = (state.categories || []).filter(function (c) { return c.active; }).sort(function (a, b) { return a.sort - b.sort; });
     var customers = (state.customers || []).filter(function (c) { return c.active; });
+    var onlineCatalogItems = (state.items || []).filter(function (item) { return item.active; });
     var writers = (state.writers || []).filter(function (writer) { return writer.active; });
     var manualCustomer = {
       id: MANUAL_CUSTOMER_ID,
@@ -1883,13 +1894,25 @@
           ),
           h("nav", { className: mobileMenuOpen ? "open" : "" },
             h("small", { className: "cloud-status " + (!online ? "offline" : cloudStatus) }, cloudStatusText()),
-            [["sale", "계산"], ["manage", "관리"], ["history", "내역"]].map(function (entry) {
+            [["sale", "계산"], ["onlineQuotes", "온라인 견적"], ["manage", "관리"], ["history", "내역"]].map(function (entry) {
             return h("button", { key: entry[0], className: activeTab === entry[0] ? "active" : "", onClick: function () { setActiveTab(entry[0]); setMobileMenuOpen(false); } }, entry[1]);
           }))
         ),
         activeTab === "sale" && h(SaleScreen, { categories: categories, activeCategoryId: activeCategoryId, setActiveCategoryId: setActiveCategoryId, items: items, customers: customers, recentCustomerIds: recentCustomerIds, selectedCustomerId: selectedCustomerId, setSelectedCustomerId: selectCustomerWithVat, manualCustomerName: manualCustomerName, setManualCustomerName: setManualCustomerName, onManualCustomer: selectManualCustomer, writers: writers, selectedWriterId: selectedWriterId, setSelectedWriterId: setSelectedWriterId, cart: cart, updateLine: updateLine, chooseItems: chooseItems, catalogDiscount: catalogDiscount, setCatalogDiscount: setCatalogDiscount, total: total, customer: customer, vatChecked: effectiveVatChecked, vatBlocked: vatBlocked, setVatChecked: setVatChecked, saveSale: requestSaveSale, clearCart: function () { setCart([]); }, totalQuantity: cart.reduce(function (sum, line) { return sum + num(line.quantity); }, 0), saleBeingEdited: saleBeingEdited, cancelSaleEdit: cancelSaleEdit, todaySummary: todaySummary }),
         activeTab === "manage" && h(ManageScreen, { state: state, setState: setState }),
-        activeTab === "history" && h(HistoryScreen, { sales: state.sales, deletionLogs: deletionLogs, setPrintSale: setPrintSale, settlementAccess: settlementAccess, deleteSale: deleteSale, beginSaleEdit: beginSaleEdit })
+        activeTab === "history" && h(HistoryScreen, { sales: state.sales, deletionLogs: deletionLogs, setPrintSale: setPrintSale, settlementAccess: settlementAccess, deleteSale: deleteSale, beginSaleEdit: beginSaleEdit }),
+        activeTab === "onlineQuotes" && (
+          window.PorsOnlineQuotes
+            ? h(window.PorsOnlineQuotes.Screen, {
+                customers: customers,
+                items: onlineCatalogItems,
+                online: online,
+                onCustomerUpdated: updateOnlineQuoteCustomer
+              })
+            : h("main", { className: "online-quotes-unavailable" },
+                h("p", null, "온라인 견적 화면을 불러오지 못했습니다.")
+              )
+        )
       ),
       printSale && h(PrintSheet, { sale: printSale, store: state.store, onClose: function () { setPrintSale(null); } }),
       saveNotice ? h("div", { className: "save-toast " + saveNotice.type, role: "status" }, saveNotice.message) : null,
