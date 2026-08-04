@@ -1894,7 +1894,7 @@
           ),
           h("nav", { className: mobileMenuOpen ? "open" : "" },
             h("small", { className: "cloud-status " + (!online ? "offline" : cloudStatus) }, cloudStatusText()),
-            [["sale", "계산"], ["onlineQuotes", "온라인 견적"], ["manage", "관리"], ["history", "내역"]].map(function (entry) {
+            [["sale", "계산"], ["manage", "관리"], ["history", "내역"], ["onlineQuotes", "웹 견적"]].map(function (entry) {
             return h("button", { key: entry[0], className: activeTab === entry[0] ? "active" : "", onClick: function () { setActiveTab(entry[0]); setMobileMenuOpen(false); } }, entry[1]);
           }))
         ),
@@ -1904,10 +1904,8 @@
         activeTab === "onlineQuotes" && (
           window.PorsOnlineQuotes
             ? h(window.PorsOnlineQuotes.Screen, {
-                customers: customers,
-                items: onlineCatalogItems,
                 online: online,
-                onCustomerUpdated: updateOnlineQuoteCustomer
+                sales: state.sales
               })
             : h("main", { className: "online-quotes-unavailable" },
                 h("p", null, "온라인 견적 화면을 불러오지 못했습니다.")

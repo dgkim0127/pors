@@ -94,13 +94,11 @@
     return legacy;
   }
 
-  function isLinkedCustomer(customer) {
-    return Boolean(
-      customer &&
-        (customer.linked === true ||
-          customer.connectionStatus === "linked" ||
-          customer.source === "linked")
-    );
+  function webBuyerLabel(quote) {
+    var name = String(
+      (quote && (quote.companyName || quote.buyerCompany)) || "웹 거래처"
+    ).trim();
+    return "웹-" + (name || "웹 거래처");
   }
 
   function resolveItemImage(item) {
@@ -124,74 +122,22 @@
     );
   }
 
-  function normalizeCatalogCustomer(customer) {
-    return {
-      id: String(customer.id),
-      name: String(customer.name || "거래처"),
-      discountRate: Number(customer.discountRate) || 0,
-      vatEnabled: Boolean(customer.vatEnabled),
-      overseas: Boolean(customer.offshore || customer.overseas),
-      active: customer.active !== false,
-      pricingRules: Array.isArray(customer.pricingRules)
-        ? customer.pricingRules
-        : [],
-    };
-  }
-
-  function normalizeCatalogItem(item) {
-    return {
-      id: String(item.id),
-      code: String(item.code || item.id),
-      name: String(item.name || item.code || "품목"),
-      basePrice: asMoney(item.price),
-      discountable: item.discountable !== false,
-      active: item.active !== false,
-      pricingRules:
-        item.pricingRules && typeof item.pricingRules === "object"
-          ? item.pricingRules
-          : {},
-    };
-  }
-
   function draftFromQuote(detail) {
     var quote = detail && detail.quote ? detail.quote : detail;
     var items = (quote && quote.items) || [];
-    var pricingLines =
-      detail &&
-      detail.pos &&
-      detail.pos.pricing &&
-      Array.isArray(detail.pos.pricing.lines)
-        ? detail.pos.pricing.lines
-        : [];
-    var pricingById = {};
-    pricingLines.forEach(function (line) {
-      pricingById[line.itemId] = line;
-    });
-
     return {
-      deductionAmount:
-        detail && detail.pos && detail.pos.pricing
-          ? asMoney(detail.pos.pricing.deductionAmount)
-          : 0,
       items: items.map(function (item) {
         var requested = Number(item.requestedQuantity || item.quantity || 0);
         var prepared =
           item.confirmedQuantity == null
             ? requested
             : Number(item.confirmedQuantity);
-        var pricingLine = pricingById[item.id] || {};
         return {
           id: item.id,
           preparedQuantity: clampQuantity(prepared, requested),
           cancellationReason: item.cancellationReason || "",
           cancellationNote: item.cancellationNote || "",
           itemNote: item.itemNote || "",
-          overrideUnitPrice:
-            pricingLine.overrideUnitPrice == null
-              ? ""
-              : String(pricingLine.overrideUnitPrice),
-          overrideReason: pricingLine.overrideReason || "",
-          posItemId: "",
         };
       }),
     };
@@ -212,25 +158,13 @@
       if (prepared < requested && !String(source.cancellationReason || "").trim()) {
         throw new Error("준비하지 못한 수량에는 취소 사유가 필요합니다.");
       }
-      if (
-        source.overrideUnitPrice !== "" &&
-        !String(source.overrideReason || "").trim()
-      ) {
-        throw new Error("품목 단가를 바꾸려면 수정 사유를 입력해야 합니다.");
-      }
-
-      var output = {
+      return {
         id: item.id,
         preparedQuantity: prepared,
         cancellationReason: String(source.cancellationReason || "").trim(),
         cancellationNote: String(source.cancellationNote || "").trim(),
         itemNote: String(source.itemNote || "").trim(),
       };
-      if (source.overrideUnitPrice !== "") {
-        output.overrideUnitPrice = asMoney(source.overrideUnitPrice);
-        output.overrideReason = String(source.overrideReason || "").trim();
-      }
-      return output;
     });
 
     return {
@@ -238,8 +172,31 @@
         Number(detail && detail.pos && detail.pos.state && detail.pos.state.version) ||
         1,
       idempotencyKey: makeIdempotencyKey(action),
-      deductionAmount: Math.max(0, asMoney(draft.deductionAmount)),
       items: items,
+    };
+  }
+
+  function buildReceiptLinkPayload(detail, sale) {
+    var quote = detail && detail.quote ? detail.quote : detail;
+    if (!sale || !sale.id) {
+      throw new Error("기존 PORS 영수증을 선택해 주세요.");
+    }
+    var totals = sale.totals || {};
+    return {
+      expectedVersion:
+        Number(detail && detail.pos && detail.pos.state && detail.pos.state.version) ||
+        1,
+      idempotencyKey: makeIdempotencyKey("receipt-link"),
+      receiptId: String(sale.id),
+      receiptSnapshot: {
+        saleId: String(sale.id),
+        customerName: String(sale.customerName || ""),
+        createdAt: sale.createdAt || null,
+        supplyAmount: asMoney(totals.supply),
+        vatAmount: asMoney(totals.vat),
+        totalAmount: asMoney(totals.total),
+        lineCount: Array.isArray(sale.lines) ? sale.lines.length : 0,
+      },
     };
   }
 
@@ -261,9 +218,11 @@
   }
 
   function apiBase() {
-    return String(
-      global.PORS_NOBLESSE_API_BASE_URL || "https://noblesse.web.app/api"
-    ).replace(/\/+$/, "");
+    var configured = String(global.PORS_NOBLESSE_API_BASE_URL || "").trim();
+    if (!configured) {
+      throw new Error("웹 견적 API 주소가 설정되지 않았습니다.");
+    }
+    return configured.replace(/\/+$/, "");
   }
 
   function firebaseConfig() {
@@ -328,14 +287,15 @@
 
   function features() {
     return Object.assign(
-      { read: true, picking: true, pricing: true, finalize: true },
+      { read: true, picking: true, pricing: true, finalize: true, publish: true, linkReceipt: true },
       global.PORS_NOBLESSE_FEATURES || {}
     );
   }
 
   function statusLabel(quote) {
     var state = quote && quote.pos && quote.pos.state;
-    if (state && state.finalizedAt) return "견적 확정";
+    if (state && state.publishedAt) return "고객 공개";
+    if (state && state.finalizedAt) return "내부 확정";
     var status = (quote && (quote.status || quote.adminStatus)) || "requested";
     var labels = {
       requested: "접수",
@@ -449,11 +409,6 @@
           { className: "online-quotes-heading__actions" },
           h(
             "button",
-            { type: "button", onClick: props.onSync, disabled: !props.online || props.busy },
-            "거래처·품목 동기화"
-          ),
-          h(
-            "button",
             { type: "button", onClick: props.onReload, disabled: props.busy },
             "새로고침"
           )
@@ -468,10 +423,6 @@
             "div",
             { className: "online-quotes-list__rows" },
             quotes.map(function (quote) {
-              var customer =
-                quote.pos && quote.pos.customer
-                  ? quote.pos.customer
-                  : { name: quote.companyName || quote.buyerCompany || "미연결 거래처" };
               var pricing = quote.pos && quote.pos.pricing;
               return h(
                 "button",
@@ -484,7 +435,7 @@
                   },
                 },
                 h("span", { className: "online-quote-list-row__main" },
-                  h("strong", null, customer.name),
+                  h("strong", null, webBuyerLabel(quote)),
                   h("small", null, quote.inquiryNumber || quote.quoteNumber || quote.id)
                 ),
                 h("span", null, Number(quote.itemCount || (quote.items || []).length || 0) + "품목"),
@@ -524,11 +475,6 @@
     var requested = Number(item.requestedQuantity || item.quantity || 0);
     var draft = props.draft;
     var image = resolveItemImage(item);
-    var mappedItemId =
-      (props.mapping &&
-        ((props.mapping.posItem && props.mapping.posItem.id) ||
-          props.mapping.posItemId)) ||
-      "";
     var cancelled = requested - clampQuantity(draft.preparedQuantity, requested);
     var canWrite = props.online && !props.finalized;
     return h(
@@ -608,82 +554,6 @@
               })
             )
           : null
-      ),
-      h(
-        "div",
-        { className: "online-quote-item__price" },
-        field(
-          "견적 단가",
-          h("input", {
-            type: "number",
-            min: 0,
-            inputMode: "numeric",
-            value: draft.overrideUnitPrice,
-            disabled: !canWrite,
-            placeholder: "PORS 기준가",
-            onChange: function (event) {
-              props.onChange("overrideUnitPrice", event.target.value);
-            },
-          })
-        ),
-        draft.overrideUnitPrice !== ""
-          ? field(
-              "단가 수정 사유",
-              h("input", {
-                value: draft.overrideReason,
-                disabled: !canWrite,
-                onChange: function (event) {
-                  props.onChange("overrideReason", event.target.value);
-                },
-                placeholder: "이번 견적에만 기록됩니다.",
-              })
-            )
-          : null,
-        field(
-          "PORS 품목 연결",
-          h(
-            "select",
-            {
-              value: mappedItemId,
-              disabled: !canWrite || !item.productId,
-              onChange: function (event) {
-                props.onMap(item.productId, event.target.value);
-              },
-            },
-            h(
-              "option",
-              { value: "", disabled: Boolean(mappedItemId) },
-              mappedItemId ? "연결 품목 선택" : "미매핑 - 사이트 요청 가격"
-            ),
-            (props.items || [])
-              .filter(function (posItem) {
-                return posItem.active !== false;
-              })
-              .map(function (posItem) {
-                return h(
-                  "option",
-                  { key: posItem.id, value: posItem.id },
-                  posItem.name + " · " + formatMoney(posItem.price)
-                );
-              })
-          )
-        ),
-        props.mapping
-          ? h(
-              "p",
-              { className: "online-quote-mapping" },
-              "현재 연결: ",
-              (props.mapping.posItem && props.mapping.posItem.name) ||
-                props.mapping.posItemId
-            )
-          : h(
-              "p",
-              {
-                className:
-                  "online-quote-mapping online-quote-mapping--missing",
-              },
-              "미매핑: 사이트 요청 가격을 기준가로 사용합니다."
-            )
       )
     );
   }
@@ -694,8 +564,8 @@
       "aside",
       { className: "online-quote-price-summary" },
       h("div", null,
-        h("strong", null, props.customer ? props.customer.name : "일반 거래처"),
-        h("span", null, isLinkedCustomer(props.customer) ? "연결됨" : "미연결 · 할인 0%")
+        h("strong", null, props.customerLabel || "웹 거래처"),
+        h("span", null, "웹 견적 · 할인 0% 고정")
       ),
       h(
         "ul",
@@ -711,8 +581,6 @@
       ),
       h("dl", null,
         h("div", null, h("dt", null, "소계"), h("dd", null, formatMoney(pricing.subtotal))),
-        h("div", null, h("dt", null, "차감"), h("dd", null, "-" + formatMoney(pricing.deductionAmount))),
-        h("div", null, h("dt", null, "할인"), h("dd", null, "-" + formatMoney(pricing.discountAmount))),
         h("div", null, h("dt", null, "공급가"), h("dd", null, formatMoney(pricing.supplyAmount))),
         h("div", null, h("dt", null, "VAT"), h("dd", null, formatMoney(pricing.vatAmount))),
         h("div", { className: "online-quote-price-summary__total" },
@@ -723,98 +591,53 @@
     );
   }
 
-  function CustomerLinker(props) {
+  function ReceiptLinker(props) {
     var selectedHook = React.useState("");
-    var selected = selectedHook[0];
-    var setSelected = selectedHook[1];
-    var linked = isLinkedCustomer(props.customer);
+    var selectedId = selectedHook[0];
+    var setSelectedId = selectedHook[1];
+    var selectedSale = (props.sales || []).find(function (sale) {
+      return String(sale.id) === String(selectedId);
+    });
+    if (!props.published) return null;
     return h(
       "details",
       { className: "online-quote-extra" },
-      h("summary", null, "거래처 연결·가격 설정"),
+      h("summary", null, "기존 PORS 영수증 수동 연결"),
       h("div", { className: "online-quote-extra__body" },
-        h("p", null, linked ? "현재 연결: " + props.customer.name : "미연결 구매자는 일반 거래처·할인 0%로 계산됩니다."),
+        h("p", null, "계산 화면에서 이미 저장·출력한 영수증만 연결합니다. 새 판매나 결제는 만들지 않습니다."),
         field(
-          "기존 거래처",
+          "기존 영수증",
           h(
             "select",
             {
-              value: selected,
-              disabled: !props.online,
-              onChange: function (event) {
-                setSelected(event.target.value);
-              },
+              value: selectedId,
+              disabled: !props.online || props.busy,
+              onChange: function (event) { setSelectedId(event.target.value); },
             },
-            h("option", { value: "" }, "거래처 선택"),
-            (props.customers || [])
-              .filter(function (customer) {
-                return customer.active !== false;
-              })
-              .map(function (customer) {
-                return h("option", { key: customer.id, value: customer.id }, customer.name);
-              })
+            h("option", { value: "" }, "영수증 선택"),
+            (props.sales || []).map(function (sale) {
+              var total = sale.totals && sale.totals.total;
+              return h(
+                "option",
+                { key: sale.id, value: sale.id },
+                (sale.customerName || "거래처") + " · " + formatMoney(total) + " · " + String(sale.createdAt || "").slice(0, 10)
+              );
+            })
           )
         ),
         h(
           "button",
           {
             type: "button",
-            disabled: !props.online || !selected,
+            disabled: !props.online || props.busy || !selectedSale || Boolean(props.linkedReceiptId),
             onClick: function () {
-              props.onLink(selected);
+              if (global.confirm("선택한 기존 PORS 영수증을 이 웹 견적에 연결할까요?")) {
+                props.onLink(selectedSale);
+              }
             },
           },
-          "이 거래처로 연결"
-        ),
-        linked
-          ? h(PermanentDiscount, {
-              online: props.online,
-              customer: props.customer,
-              onSave: props.onSaveDiscount,
-            })
-          : null
-      )
-    );
-  }
-
-  function PermanentDiscount(props) {
-    var rateHook = React.useState(String(props.customer.discountRate || 0));
-    var rate = rateHook[0];
-    var setRate = rateHook[1];
-    return h(
-      "div",
-      { className: "online-quote-permanent-discount" },
-      h("strong", null, "거래처 기본 할인"),
-      h("p", null, "저장하면 다음 견적에도 영구 적용됩니다."),
-      field(
-        "할인율(%)",
-        h("input", {
-          type: "number",
-          min: 0,
-          max: 100,
-          value: rate,
-          disabled: !props.online,
-          onChange: function (event) {
-            setRate(event.target.value);
-          },
-        })
-      ),
-      h(
-        "button",
-        {
-          type: "button",
-          disabled: !props.online,
-          onClick: function () {
-            if (
-              global.confirm(
-                "이 할인율을 거래처 기본값으로 영구 저장할까요?"
-              )
-            ) {
-              props.onSave(Number(rate));
-            }
-          },
-        },
-        "영구 할인 저장"
+          props.linkedReceiptId ? "영수증 연결됨" : "선택한 영수증 연결"
+        )
       )
     );
   }
@@ -826,14 +649,15 @@
     (props.draft.items || []).forEach(function (item) {
       itemDrafts[item.id] = item;
     });
-    var mappingByProductId = {};
-    ((detail.pos && detail.pos.productMappings) || []).forEach(function (mapping) {
-      mappingByProductId[mapping.productId] = mapping;
-    });
     var finalized = Boolean(
       detail.pos &&
         (detail.pos.finalizedAt ||
           (detail.pos.state && detail.pos.state.finalizedAt))
+    );
+    var published = Boolean(
+      detail.pos &&
+        (detail.pos.publishedAt ||
+          (detail.pos.state && detail.pos.state.publishedAt))
     );
 
     return h(
@@ -848,9 +672,9 @@
           "← 목록"
         ),
         h("div", null,
-          h("p", { className: "online-quotes-eyebrow" }, statusLabel(quote)),
+          h("p", { className: "online-quotes-eyebrow" }, statusLabel(Object.assign({}, quote, { pos: detail.pos }))),
           h("h2", null, quote.quoteNumber || quote.inquiryNumber || "온라인 견적"),
-          h("p", null, (detail.pos && detail.pos.customer && detail.pos.customer.name) || quote.companyName || "미연결 거래처")
+          h("p", null, webBuyerLabel(quote))
         ),
         h(
           "button",
@@ -867,13 +691,6 @@
         ? h("p", { className: "online-quotes-offline" }, "오프라인: 저장·가격 계산·확정은 사용할 수 없습니다.")
         : null,
       props.error ? h("p", { className: "online-quotes-error" }, props.error) : null,
-      h(CustomerLinker, {
-        online: props.online && !finalized,
-        customers: props.customers,
-        customer: detail.pos && detail.pos.customer,
-        onLink: props.onLinkCustomer,
-        onSaveDiscount: props.onSaveDiscount,
-      }),
       h(
         "div",
         { className: "online-quote-detail__items" },
@@ -884,43 +701,18 @@
             draft: itemDrafts[item.id] || {
               preparedQuantity: 0,
               cancellationReason: "",
-              overrideUnitPrice: "",
-              overrideReason: "",
             },
-            mapping: mappingByProductId[item.productId],
-            items: props.items,
             online: props.online,
             finalized: finalized,
-            onMap: props.onMapProduct,
             onChange: function (fieldName, value) {
               props.onItemChange(item.id, fieldName, value);
             },
           });
         })
       ),
-      h(
-        "details",
-        { className: "online-quote-extra" },
-        h("summary", null, "가격 추가 설정"),
-        h("div", { className: "online-quote-extra__body" },
-          field(
-            "차감액",
-            h("input", {
-              type: "number",
-              min: 0,
-              inputMode: "numeric",
-              disabled: !props.online || finalized,
-              value: props.draft.deductionAmount,
-              onChange: function (event) {
-                props.onDraftChange("deductionAmount", event.target.value);
-              },
-            })
-          )
-        )
-      ),
       h(PriceSummary, {
         pricing: props.pricing,
-        customer: detail.pos && detail.pos.customer,
+        customerLabel: webBuyerLabel(quote),
       }),
       h(
         "div",
@@ -952,12 +744,43 @@
             onClick: props.onFinalize,
           },
           finalized ? "견적 확정됨" : "견적 확정"
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            className: "online-quotes-primary",
+            disabled: !props.online || props.busy || !finalized || published || !features().publish,
+            onClick: props.onPublish,
+          },
+          published ? "고객 공개됨" : "고객에게 견적 공개"
         )
-      )
+      ),
+      h(ReceiptLinker, {
+        online: props.online,
+        busy: props.busy,
+        published: published,
+        linkedReceiptId: detail.pos && detail.pos.state && detail.pos.state.linkedReceiptId,
+        sales: props.sales,
+        onLink: props.onLinkReceipt,
+      })
     );
   }
 
   function OnlineQuotesScreen(props) {
+    if (!React || !h) return null;
+    var configurationError = "";
+    try {
+      apiBase();
+    } catch (error) {
+      configurationError = error.message;
+    }
+    if (configurationError) {
+      return h("main", { className: "online-quotes-unavailable" },
+        h("strong", null, "웹 견적이 비활성화되었습니다."),
+        h("p", null, configurationError)
+      );
+    }
     var authHook = React.useState(null);
     var auth = authHook[0];
     var setAuth = authHook[1];
@@ -1044,26 +867,6 @@
       }
     }
 
-    async function syncCatalog() {
-      setBusy(true);
-      setError("");
-      try {
-        await request("/admin/pos/catalog-sync", {
-          method: "PUT",
-          body: {
-            sourceVersion: Date.now(),
-            customers: (props.customers || []).map(normalizeCatalogCustomer),
-            items: (props.items || []).map(normalizeCatalogItem),
-          },
-        });
-        await loadQuotes();
-      } catch (syncError) {
-        setError(syncError.message);
-      } finally {
-        setBusy(false);
-      }
-    }
-
     function updateItem(itemId, fieldName, value) {
       setDraft(function (current) {
         return Object.assign({}, current, {
@@ -1102,6 +905,12 @@
     }
 
     async function writeQuote(action, path, confirmMessage) {
+      if (action === "finalize") {
+        confirmMessage = "준비 수량 기준으로 내부 견적을 확정할까요? 이 단계에서는 고객에게 공개되지 않습니다.";
+      }
+      if (action === "publish") {
+        confirmMessage = "확정된 최신 견적서와 PDF를 고객에게 공개할까요?";
+      }
       if (confirmMessage && !global.confirm(confirmMessage)) return;
       setBusy(true);
       setError("");
@@ -1115,7 +924,7 @@
           }
         );
         applyWriteResponse(response);
-        if (action === "finalize") await loadQuotes();
+        if (action === "finalize" || action === "publish") await loadQuotes();
       } catch (writeError) {
         if (writeError.status === 409) {
           setError("다른 기기에서 먼저 수정했습니다. 현재 입력은 유지되므로 새로고침 후 다시 적용해 주세요.");
@@ -1127,59 +936,27 @@
       }
     }
 
-    async function linkCustomer(posCustomerId) {
-      var quote = detail.quote || detail;
+    async function linkExistingReceipt(sale) {
+      if (!detail) return;
       setBusy(true);
       setError("");
       try {
-        await request(
-          "/admin/pos/buyers/" + encodeURIComponent(quote.buyerId) + "/link",
-          { method: "PUT", body: { posCustomerId: posCustomerId } }
+        var quote = detail.quote || detail;
+        var response = await request(
+          "/admin/pos/quotes/" + encodeURIComponent(quote.id) + "/receipt-link",
+          {
+            method: "POST",
+            body: buildReceiptLinkPayload(detail, sale),
+          }
         );
-        await openQuote(quote.id);
+        applyWriteResponse(response);
+        await loadQuotes();
       } catch (linkError) {
-        setError(linkError.message);
-      } finally {
-        setBusy(false);
-      }
-    }
-
-    async function savePermanentDiscount(discountRate) {
-      var customer = detail.pos && detail.pos.customer;
-      if (!customer || !customer.id) return;
-      setBusy(true);
-      setError("");
-      try {
-        await request("/admin/pos/customers/" + encodeURIComponent(customer.id), {
-          method: "PUT",
-          body: {
-            discountRate: discountRate,
-            confirmPermanentPricing: true,
-          },
-        });
-        if (typeof props.onCustomerUpdated === "function") {
-          props.onCustomerUpdated(customer.id, { discountRate: discountRate });
+        if (linkError.status === 409) {
+          setError("다른 기기에서 먼저 변경했습니다. 최신 견적을 다시 불러와 확인해 주세요.");
+        } else {
+          setError(linkError.message);
         }
-        await openQuote((detail.quote || detail).id);
-      } catch (discountError) {
-        setError(discountError.message);
-      } finally {
-        setBusy(false);
-      }
-    }
-
-    async function linkProduct(productId, posItemId) {
-      if (!productId || !posItemId) return;
-      setBusy(true);
-      setError("");
-      try {
-        await request(
-          "/admin/pos/products/" + encodeURIComponent(productId) + "/link",
-          { method: "PUT", body: { posItemId: posItemId } }
-        );
-        await openQuote((detail.quote || detail).id);
-      } catch (linkError) {
-        setError(linkError.message);
       } finally {
         setBusy(false);
       }
@@ -1203,22 +980,13 @@
         online: online,
         busy: busy,
         error: error,
-        customers: props.customers || [],
-        items: props.items || [],
+        sales: props.sales || [],
         onBack: function () {
           setDetail(null);
           setDraft(null);
           setError("");
         },
         onItemChange: updateItem,
-        onMapProduct: linkProduct,
-        onDraftChange: function (fieldName, value) {
-          setDraft(function (current) {
-            var patch = {};
-            patch[fieldName] = value;
-            return Object.assign({}, current, patch);
-          });
-        },
         onSavePicking: function () {
           writeQuote("picking", "/picking");
         },
@@ -1232,8 +1000,10 @@
             "이 견적을 확정하고 고객에게 최종 가격과 새 문서를 공개할까요? 매출·주문·결제·재고는 생성되지 않습니다."
           );
         },
-        onLinkCustomer: linkCustomer,
-        onSaveDiscount: savePermanentDiscount,
+        onPublish: function () {
+          writeQuote("publish", "/publish");
+        },
+        onLinkReceipt: linkExistingReceipt,
       });
     }
     return h(QuoteList, {
@@ -1243,7 +1013,6 @@
       error: error,
       onOpen: openQuote,
       onReload: loadQuotes,
-      onSync: syncCatalog,
     });
   }
 
@@ -1251,13 +1020,12 @@
     Screen: OnlineQuotesScreen,
     core: {
       buildWritePayload: buildWritePayload,
+      buildReceiptLinkPayload: buildReceiptLinkPayload,
       draftFromQuote: draftFromQuote,
       groupPriceBands: groupPriceBands,
-      isLinkedCustomer: isLinkedCustomer,
-      normalizeCatalogCustomer: normalizeCatalogCustomer,
-      normalizeCatalogItem: normalizeCatalogItem,
       optionPairs: optionPairs,
       resolveItemImage: resolveItemImage,
+      webBuyerLabel: webBuyerLabel,
     },
   };
 })(window);
