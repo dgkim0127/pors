@@ -60,6 +60,7 @@ const {
   draftFromQuote,
   groupPriceBands,
   optionPairs,
+  quoteItemsFromDetail,
   quoteListQuantity,
   requestedQuantityFromDetail,
   resolveItemImage,
@@ -83,6 +84,21 @@ assert.deepEqual(JSON.parse(JSON.stringify(draft)), {
   items: [
     { cancellationNote: "", cancellationReason: "", id: "line-1", itemNote: "", preparedQuantity: 3 },
     { cancellationNote: "", cancellationReason: "", id: "line-2", itemNote: "", preparedQuantity: 1 },
+  ],
+});
+
+const topLevelItemsDetail = {
+  quote: { id: "quote-2", companyName: "Top level shop" },
+  items: [{ id: "line-3", requestedQuantity: 2, confirmedQuantity: 1 }],
+  pos: { state: { version: 7 } },
+};
+assert.deepEqual(
+  JSON.parse(JSON.stringify(quoteItemsFromDetail(topLevelItemsDetail))),
+  [{ id: "line-3", requestedQuantity: 2, confirmedQuantity: 1 }],
+);
+assert.deepEqual(JSON.parse(JSON.stringify(draftFromQuote(topLevelItemsDetail))), {
+  items: [
+    { cancellationNote: "", cancellationReason: "", id: "line-3", itemNote: "", preparedQuantity: 1 },
   ],
 });
 

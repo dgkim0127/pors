@@ -101,12 +101,15 @@
     return "웹-" + (name || "웹 거래처");
   }
 
+  function quoteItemsFromDetail(detail) {
+    var quote = detail && detail.quote ? detail.quote : detail;
+    if (quote && Array.isArray(quote.items)) return quote.items;
+    if (detail && Array.isArray(detail.items)) return detail.items;
+    return null;
+  }
+
   function requestedQuantityFromDetail(detail) {
-    var items = detail && Array.isArray(detail.items)
-      ? detail.items
-      : detail && detail.quote && Array.isArray(detail.quote.items)
-        ? detail.quote.items
-        : null;
+    var items = quoteItemsFromDetail(detail);
     if (!items) return null;
     return items.reduce(function (sum, item) {
       var quantity = Number(item.requestedQuantity || item.quantity || 0);
@@ -149,8 +152,7 @@
   }
 
   function draftFromQuote(detail) {
-    var quote = detail && detail.quote ? detail.quote : detail;
-    var items = (quote && quote.items) || [];
+    var items = quoteItemsFromDetail(detail) || [];
     return {
       items: items.map(function (item) {
         var requested = Number(item.requestedQuantity || item.quantity || 0);
@@ -170,8 +172,7 @@
   }
 
   function buildWritePayload(detail, draft, action) {
-    var quote = detail && detail.quote ? detail.quote : detail;
-    var quoteItems = (quote && quote.items) || [];
+    var quoteItems = quoteItemsFromDetail(detail) || [];
     var draftById = {};
     (draft.items || []).forEach(function (item) {
       draftById[item.id] = item;
@@ -605,6 +606,7 @@
   function QuoteDetail(props) {
     var detail = props.detail;
     var quote = detail.quote || detail;
+    var quoteItems = quoteItemsFromDetail(detail) || [];
     var itemDrafts = {};
     (props.draft.items || []).forEach(function (item) {
       itemDrafts[item.id] = item;
@@ -646,7 +648,7 @@
       h(
         "div",
         { className: "online-quote-detail__items" },
-        (quote.items || []).map(function (item) {
+        quoteItems.map(function (item) {
           return h(QuoteItem, {
             key: item.id,
             item: item,
@@ -983,6 +985,7 @@
       draftFromQuote: draftFromQuote,
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,
+      quoteItemsFromDetail: quoteItemsFromDetail,
       resolveItemImage: resolveItemImage,
       requestedQuantityFromDetail: requestedQuantityFromDetail,
       quoteListQuantity: quoteListQuantity,
