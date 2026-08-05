@@ -1,8 +1,9 @@
-const CACHE_NAME = "piercing-pos-v12";
+const CACHE_NAME = "piercing-pos-v13";
 const ASSETS = [
   "./",
   "./index.html",
   "./app-config.js",
+  "./pors-device-config.js",
   "./manifest.webmanifest",
   "./standalone.js",
   "./online-quotes.js",

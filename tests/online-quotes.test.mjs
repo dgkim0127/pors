@@ -33,7 +33,17 @@ const context = vm.createContext({
   window: windowObject,
 });
 const source = fs.readFileSync(new URL("../src/online-quotes.js", import.meta.url), "utf8");
+const viteConfigSource = fs.readFileSync(new URL("../vite.config.js", import.meta.url), "utf8");
 vm.runInContext(source, context);
+
+assert.match(source, /readRequest\("\/pors\/quotes"\)/);
+assert.match(source, /X-Pors-Quote-Read-Token/);
+assert.match(source, /if \(features\(\)\.read\) loadQuotes\(\)/);
+assert.doesNotMatch(source, /if \(user && features\(\)\.read\) loadQuotes\(\)/);
+assert.match(source, /로그인 없이 조회 중입니다/);
+assert.match(source, /disabled: !props\.online \|\| !props\.canWrite/);
+assert.match(viteConfigSource, /PORS_NOBLESSE_READ_TOKEN/);
+assert.match(viteConfigSource, /pors-device-config\.js/);
 
 const {
   buildReceiptLinkPayload,
