@@ -457,12 +457,7 @@
       { className: "online-quotes-list" },
       h(
         "div",
-        { className: "online-quotes-heading" },
-        h("div", null,
-          h("p", { className: "online-quotes-eyebrow" }, "NOBLESSE"),
-          h("h2", null, "온라인 견적"),
-          h("p", null, "고객 요청을 열어 수량을 확인하고 최종 견적을 확정합니다.")
-        ),
+        { className: "online-quotes-toolbar" },
         h(
           "div",
           { className: "online-quotes-heading__actions" },
@@ -501,10 +496,13 @@
                   },
                 },
                 h("span", { className: "online-quote-list-row__main" },
-                  h("strong", null, webBuyerLabel(quote))
+                  h("strong", null, webBuyerLabel(quote)),
+                  h("span", { className: "online-quote-list-row__chevron", "aria-hidden": "true" }, "⌄")
                 ),
-                h("span", { className: "online-quote-list-row__quantity" }, quoteListQuantity(quote) + "개"),
-                h("span", { className: "online-quote-list-row__price" }, pricing ? formatMoney(pricing.totalAmount) : formatMoney(quote.confirmedTotal || quote.requestedTotal))
+                h("span", { className: "online-quote-list-row__summary" },
+                  h("strong", { className: "online-quote-list-row__price" }, pricing ? formatMoney(pricing.totalAmount) : formatMoney(quote.confirmedTotal || quote.requestedTotal)),
+                  h("span", { className: "online-quote-list-row__quantity" }, quoteListQuantity(quote) + "개")
+                )
               );
             })
           )

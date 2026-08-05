@@ -131,6 +131,9 @@ assert.equal(quoteListQuantity({ items: [{ requestedQuantity: 4 }] }), 4);
 assert.equal(quoteListQuantity({ itemCount: 3 }), 3);
 assert.match(source, /className: "online-quotes-refresh"/);
 assert.match(source, /"aria-label": "새로고침"/);
+assert.match(source, /className: "online-quotes-toolbar"/);
+assert.match(source, /online-quote-list-row__chevron/);
+assert.match(source, /online-quote-list-row__summary/);
 assert.doesNotMatch(source, /h\("small", null, quote\.inquiryNumber/);
 assert.doesNotMatch(source, /className: "online-quote-status" }, statusLabel\(quote\)/);
 

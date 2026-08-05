@@ -4765,6 +4765,12 @@ body.native-printing .receipt-preview-page .receipt {
   gap: 8px;
 }
 
+.online-quotes-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
 .online-quotes-heading > div:first-child {
   min-width: 0;
   flex: 1 1 auto;
@@ -4814,20 +4820,21 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quotes-list__rows {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .online-quote-list-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
   width: 100%;
-  min-height: 76px;
+  min-height: 142px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 14px;
   background: var(--panel);
   color: var(--ink);
   text-align: left;
@@ -4840,8 +4847,10 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-list-row__main {
   min-width: 0;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .online-quote-list-row__main strong,
@@ -4858,18 +4867,36 @@ body.native-printing .receipt-preview-page .receipt {
   font-weight: 800;
 }
 
-.online-quote-list-row b {
+.online-quote-list-row__chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 0.8;
   white-space: nowrap;
+}
+
+.online-quote-list-row__summary {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid var(--line);
+  padding-top: 13px;
 }
 
 .online-quote-list-row__quantity,
 .online-quote-list-row__price {
   white-space: nowrap;
-  font-weight: 900;
 }
 
 .online-quote-list-row__price {
   color: var(--accent-strong);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.online-quote-list-row__quantity {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .online-quote-status {
@@ -5247,22 +5274,22 @@ body.native-printing .receipt-preview-page .receipt {
   }
 
   .online-quote-list-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
-    min-height: 88px;
-    padding: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    min-height: 142px;
+    padding: 14px;
   }
 
   .online-quote-list-row__main {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .online-quote-list-row__quantity {
-    grid-column: 1;
+    grid-column: auto;
   }
 
   .online-quote-list-row__price {
-    grid-column: 2;
+    grid-column: auto;
   }
 
   .online-quote-list-row > small {
