@@ -1,6 +1,6 @@
 {
   "appId": "com.piercingpos.app",
-  "appName": "피어싱 계산",
+  "appName": "pors-pos",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

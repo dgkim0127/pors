@@ -37,6 +37,42 @@ const cart = [
 }
 
 {
+  const totals = calculateSale([{ price: 10000, quantity: 10, discountable: true }], { discountRate: 0, vatEnabled: true }, { deductionAmount: 15000, deductionTaxIncluded: true });
+  assert.equal(totals.beforeDeductionTotal, 110000);
+  assert.equal(totals.beforeDeductionSupply, 100000);
+  assert.equal(totals.deduction, 15000);
+  assert.equal(totals.deductionTaxIncluded, true);
+  assert.equal(totals.supply, 85000);
+  assert.equal(totals.vat, 8500);
+  assert.equal(totals.total, 93500);
+}
+
+{
+  const totals = calculateSale([{ price: 10000, quantity: 10, discountable: true }], { discountRate: 10, vatEnabled: true }, { deductionAmount: 15000, deductionTaxIncluded: false });
+  assert.equal(totals.subtotal, 100000);
+  assert.equal(totals.discount, 8500);
+  assert.equal(totals.beforeDeductionSupply, 90000);
+  assert.equal(totals.deduction, 15000);
+  assert.equal(totals.supply, 76500);
+  assert.equal(totals.vat, 7650);
+  assert.equal(totals.total, 84150);
+}
+
+{
+  const totals = calculateSale([{ price: 500000, quantity: 1, discountable: true }], { discountRate: 0, vatEnabled: false }, { deductionAmount: 10000 });
+  assert.equal(totals.deduction, 10000);
+  assert.equal(totals.discount, 0);
+  assert.equal(totals.supply, 490000);
+  assert.equal(totals.total, 490000);
+}
+
+{
+  const totals = calculateSale([{ price: 1000, quantity: 2, discountable: true }], { discountRate: 0, vatEnabled: false }, { deductionAmount: 5000, deductionTaxIncluded: false });
+  assert.equal(totals.deduction, 2000);
+  assert.equal(totals.total, 0);
+}
+
+{
   const totals = calculateSale([{ price: 1000, quantity: 100, discountable: true }], { discountRate: 0, vatEnabled: false });
   assert.equal(totals.discount, 0);
   assert.equal(totals.total, 100000);
@@ -114,8 +150,8 @@ const cart = [
 
 {
   const totals = calculateSale([
-    { name: "상품", price: 499000, quantity: 1, discountable: true },
-    { name: "배송", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
+    { name: "product", price: 499000, quantity: 1, discountable: true },
+    { name: "\uBC30\uC1A1", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
   ], { discountRate: 0, vatEnabled: false });
   assert.equal(totals.discount, 0);
   assert.equal(totals.total, 502500);
@@ -123,8 +159,8 @@ const cart = [
 
 {
   const totals = calculateSale([
-    { name: "상품", price: 500000, quantity: 1, discountable: true },
-    { name: "배송", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
+    { name: "product", price: 500000, quantity: 1, discountable: true },
+    { name: "\uBC30\uC1A1", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
   ], { discountRate: 0, vatEnabled: false });
   assert.equal(totals.discount, 25000);
   assert.equal(totals.total, 478500);
@@ -132,8 +168,8 @@ const cart = [
 
 {
   const totals = calculateSale([
-    { name: "상품", price: 1000000, quantity: 1, discountable: true },
-    { name: "배송(양양)", categoryId: "cat_no_discount", price: 1000, quantity: 1, discountable: false }
+    { name: "product", price: 1000000, quantity: 1, discountable: true },
+    { name: "\uBC30\uC1A1(\uC591\uC591)", categoryId: "cat_no_discount", price: 1000, quantity: 1, discountable: false }
   ], { discountRate: 0, vatEnabled: false });
   assert.equal(totals.discount, 100000);
   assert.equal(totals.total, 901000);
@@ -141,8 +177,8 @@ const cart = [
 
 {
   const totals = calculateSale([
-    { name: "상품", price: 500000, quantity: 1, discountable: true },
-    { name: "배송", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
+    { name: "product", price: 500000, quantity: 1, discountable: true },
+    { name: "\uBC30\uC1A1", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
   ], { discountRate: 10, vatEnabled: false });
   assert.equal(totals.discount, 50000);
   assert.equal(totals.total, 453500);
@@ -150,8 +186,8 @@ const cart = [
 
 {
   const totals = calculateSale([
-    { name: "상품", price: 1000000, quantity: 1, discountable: true },
-    { name: "배송", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
+    { name: "product", price: 1000000, quantity: 1, discountable: true },
+    { name: "\uBC30\uC1A1", categoryId: "cat_no_discount", price: 3500, quantity: 1, discountable: false }
   ], { discountRate: 0, vatEnabled: true, offshore: true });
   assert.equal(totals.discount, 0);
   assert.equal(totals.vat, 0);
@@ -160,11 +196,43 @@ const cart = [
 
 {
   const totals = calculateSale([
-    { name: "상품", price: 1000000, quantity: 1, discountable: true }
+    { name: "product", price: 1000000, quantity: 1, discountable: true }
   ], { discountRate: 0, vatEnabled: true, offshore: false });
   assert.equal(totals.discount, 100000);
   assert.equal(totals.vat, 90000);
   assert.equal(totals.total, 990000);
+}
+
+{
+  const totals = calculateSale([
+    { name: "product", price: 1000000, quantity: 1, discountable: true }
+  ], { name: "\uB0A8\uB3C4\uB9C8\uCF13", discountRate: 0, vatEnabled: false });
+  assert.equal(totals.discount, 0);
+  assert.equal(totals.total, 1000000);
+}
+
+{
+  const totals = calculateSale([
+    { name: "product", price: 500000, quantity: 1, discountable: true }
+  ], { name: "(\uAD11\uC8FC) \uB0A8\uB3C4\uB9C8\uCF13", discountRate: 0, vatEnabled: false });
+  assert.equal(totals.discount, 0);
+  assert.equal(totals.total, 500000);
+}
+
+{
+  const totals = calculateSale([
+    { name: "product", price: 1000000, quantity: 1, discountable: true }
+  ], { name: "\uB0A8\uB3C4\uB9C8\uCF13 - \uC11C\uC6B8", discountRate: 0, vatEnabled: false });
+  assert.equal(totals.discount, 0);
+  assert.equal(totals.total, 1000000);
+}
+
+{
+  const totals = calculateSale([
+    { name: "product", price: 500000, quantity: 1, discountable: true }
+  ], { name: "\uB0A8\uB3C4 \uB9C8\uCF13", discountRate: 0, vatEnabled: false });
+  assert.equal(totals.discount, 0);
+  assert.equal(totals.total, 500000);
 }
 
 console.log("calculation tests passed");

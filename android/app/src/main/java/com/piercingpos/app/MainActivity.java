@@ -31,7 +31,9 @@ public class MainActivity extends BridgeActivity {
             getWindow().getDecorView().setSystemUiVisibility(flags);
         }
         if (getBridge() != null && getBridge().getWebView() != null) {
-            getBridge().getWebView().addJavascriptInterface(new NativePrintBridge(), "PorsPrint");
+            WebView webView = getBridge().getWebView();
+            webView.getSettings().setTextZoom(100);
+            webView.addJavascriptInterface(new NativePrintBridge(), "PorsPrint");
         }
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override

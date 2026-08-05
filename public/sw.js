@@ -1,14 +1,15 @@
-const CACHE_NAME = "piercing-pos-v6";
+const CACHE_NAME = "piercing-pos-v17";
 const ASSETS = [
   "./",
   "./index.html",
   "./app-config.js",
   "./manifest.webmanifest",
   "./standalone.js",
+  "./online-quotes.js",
   "./vendor/react.production.min.js",
   "./vendor/react-dom.production.min.js",
-  "./icons/icon-192.svg",
-  "./icons/icon-512.svg"
+  "./icons/icon-192.png",
+  "./icons/icon-512.png"
 ];
 
 self.addEventListener("install", (event) => {

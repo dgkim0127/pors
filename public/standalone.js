@@ -22,7 +22,9 @@
     }).catch(function () {});
   }
   var h = React.createElement;
-  var root = ReactDOM.createRoot(document.getElementById("root"));
+  var rootElement = document.getElementById("root");
+  rootElement.classList.remove("loading");
+  var root = ReactDOM.createRoot(rootElement);
   var STORE_KEY = "piercing-pos-state-v5";
   var DATA_VERSION = 23;
   var AUTH_KEY = "piercing-pos-auth-v1";
@@ -33,7 +35,7 @@
   var MAX_TEXT_LENGTH = 40;
   var MAX_PRICE = 99999999;
   var MAX_QUANTITY = 999;
-  var MAX_SALES = 500;
+  var MAX_CACHED_SALES = 500;
   var KRW = new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW", maximumFractionDigits: 0 });
   var firebaseDb = null;
   var firebasePersistenceTried = false;
@@ -86,6 +88,41 @@
     } catch (error) {}
   }
 
+  function sharedRecentCustomerIds(sales, localIds) {
+    var seen = {};
+    var ids = [];
+    function add(customerId) {
+      if (!customerId || customerId === MANUAL_CUSTOMER_ID || seen[customerId]) return;
+      seen[customerId] = true;
+      ids.push(customerId);
+    }
+    (sales || []).slice().sort(function (a, b) {
+      return Date.parse(b.createdAt || "") - Date.parse(a.createdAt || "");
+    }).forEach(function (sale) {
+      add(sale.customerId);
+    });
+    (localIds || []).forEach(add);
+    return ids.slice(0, 8);
+  }
+
+  function mergeSaleHistories() {
+    var byId = {};
+    Array.prototype.slice.call(arguments).forEach(function (sales) {
+      (sales || []).forEach(function (sale) {
+        if (!sale || !sale.id) return;
+        var existing = byId[sale.id];
+        var saleUpdatedAt = num(sale.cloudUpdatedAt) || Date.parse(sale.updatedAt || sale.createdAt || "") || 0;
+        var existingUpdatedAt = existing ? num(existing.cloudUpdatedAt) || Date.parse(existing.updatedAt || existing.createdAt || "") || 0 : -1;
+        if (!existing || saleUpdatedAt >= existingUpdatedAt) byId[sale.id] = sale;
+      });
+    });
+    return Object.keys(byId).map(function (saleId) {
+      return byId[saleId];
+    }).sort(function (a, b) {
+      return (Date.parse(b.createdAt || "") || 0) - (Date.parse(a.createdAt || "") || 0);
+    });
+  }
+
   window.PORS_BACK_HANDLERS = window.PORS_BACK_HANDLERS || [];
   function registerMobileBackHandler(handler) {
     window.PORS_BACK_HANDLERS.push(handler);
@@ -121,7 +158,8 @@
     var now = Date.now();
     var safeState = Object.assign({}, state, {
       clientUpdatedAt: now,
-      sales: (state.sales || []).slice(0, MAX_SALES)
+      sales: (state.sales || []).slice(0, MAX_CACHED_SALES),
+      deletionLogs: (state.deletionLogs || []).slice(0, 200)
     });
     localStorage.setItem(STORE_KEY, JSON.stringify(safeState));
   }
@@ -287,7 +325,7 @@
         items: sortRows(docsToRows(results[2]).map(cleanRemoteRow)),
         customers: sortRows(docsToRows(results[3]).map(cleanRemoteRow)),
         writers: sortRows(docsToRows(results[4]).map(cleanRemoteRow)),
-        sales: docsToRows(results[5]).map(cleanRemoteRow).sort(function (a, b) { return Date.parse(b.createdAt || "") - Date.parse(a.createdAt || ""); }).slice(0, MAX_SALES),
+        sales: docsToRows(results[5]).map(cleanRemoteRow).sort(function (a, b) { return Date.parse(b.createdAt || "") - Date.parse(a.createdAt || ""); }),
         clientUpdatedAt: cloudUpdatedAt,
         dataVersion: cloudDataVersion || 14
       };
@@ -529,7 +567,8 @@
     var now = Date.now();
     quickCloudSavePending = Object.assign({}, clone(state), {
       clientUpdatedAt: now,
-      sales: (state.sales || []).slice(0, MAX_SALES)
+      sales: (state.sales || []).slice(0, MAX_CACHED_SALES),
+      deletionLogs: (state.deletionLogs || []).slice(0, 200)
     });
     return flushQuickCloudState();
   }
@@ -551,10 +590,10 @@
   function subscribeSalesCollection(onSales) {
     var collection = firebaseCollection("sales");
     if (!collection || typeof collection.onSnapshot !== "function") return function () {};
-    return collection.orderBy("createdAt", "desc").limit(MAX_SALES).onSnapshot(function (snapshot) {
+    return collection.orderBy("createdAt", "desc").onSnapshot(function (snapshot) {
       var sales = docsToRows(snapshot).map(cleanRemoteRow).sort(function (a, b) {
         return Date.parse(b.createdAt || "") - Date.parse(a.createdAt || "");
-      }).slice(0, MAX_SALES);
+      });
       notifyCloudStatus("synced");
       onSales(sales);
     }, function (error) {
@@ -675,7 +714,8 @@
       { id: "writer_goeunkyeong", name: "고은경", active: true }
     ],
     groups: [],
-    sales: []
+    sales: [],
+    deletionLogs: []
   };
 
   function clone(value) {
@@ -714,6 +754,7 @@
     "멋쟁이 - 10%",
     "모모(대구,창원) - 10%",
     "모엘로(제이에스리테일) - 20%",
+    "무드 - 10%",
     "무드모아젤 - 5%",
     "미녀와야수(부평) - 10%",
     "벽작 - 10%",
@@ -729,8 +770,8 @@
     "실버비키니(덕천티아라) - 5%",
     "심미안(건대) - 0%",
     "심미안(건대 제외) - 15%",
-    "일산 심쿵 - 15%",
-    "노원 심쿵 - 15%",
+    "(일산) 심쿵 - 15%",
+    "(노원) 심쿵 - 15%",
     "아이피엠(IPM) - 5%",
     "아이엠엠제이(IAMJ) - 15%",
     "에이에스에프(ASAP) - 10%",
@@ -741,7 +782,7 @@
     "쇼콜라(제주) - 5%",
     "스파이시 - 0% 무역회사 5%",
     "스파이시(현금) - 0%",
-    "잠실 심쿵 - 5%",
+    "(잠실) 심쿵 - 5%",
     "에브리띵 2900 - 20%",
     "웬디(홍콩) - 10%",
     "악동클럽 - 5%",
@@ -812,6 +853,23 @@
     return "customer_" + Math.abs(hash).toString(36);
   }
 
+  function regionCustomerName(baseName, regionName) {
+    var base = safeText(baseName);
+    var region = safeText(regionName);
+    return region ? "(" + region + ") " + base : base;
+  }
+
+  function splitRegionCustomerNames(name) {
+    var cleanName = safeText(name);
+    if (!cleanName || /^\([^)）]+\)\s+/.test(cleanName)) return cleanName ? [cleanName] : [];
+    var match = cleanName.match(/^(.+?)\s*[\(（]([^\)）]+)[\)）]\s*$/);
+    if (!match) return [cleanName];
+    var baseName = safeText(match[1]);
+    var regions = String(match[2] || "").split(/[,\uFF0C]/).map(safeText).filter(Boolean);
+    if (!baseName || !regions.length) return [cleanName];
+    return regions.map(function (region) { return regionCustomerName(baseName, region); });
+  }
+
   function customerRulesFromNote(note) {
     var cleanNote = safeText(note);
     var pricingRules = [];
@@ -847,33 +905,69 @@
   }
 
   function parseCustomerDefaults() {
-    return customerDefaultsText.map(function (line) {
+    return customerDefaultsText.reduce(function (rows, line) {
       var match = line.match(/^(.+?)\s*-\s*(\d+(?:\.\d+)?)%\s*(.*)$/);
-      if (!match) return null;
+      if (!match) return rows;
       var note = safeText(match[3] || "").replace(/^\((.*)\)$/, "$1");
       var rules = customerRulesFromNote(note);
-      return {
-        id: stableCustomerId(match[1]),
-        name: safeText(match[1]),
-        discountRate: clamp(match[2], 0, 100),
-        vatEnabled: false,
-        active: true,
-        note: note,
-        pricingRules: rules.pricingRules,
-        discountRules: rules.discountRules,
-        vatExempt: rules.vatExempt,
-        offshore: rules.offshore,
-        tradeCompanyName: rules.tradeCompanyName,
-        tradeCommissionRate: rules.tradeCommissionRate
-      };
-    }).filter(Boolean);
+      splitRegionCustomerNames(match[1]).forEach(function (customerName) {
+        rows.push({
+          id: stableCustomerId(customerName),
+          name: customerName,
+          discountRate: clamp(match[2], 0, 100),
+          vatEnabled: false,
+          active: true,
+          note: note,
+          pricingRules: rules.pricingRules,
+          discountRules: rules.discountRules,
+          vatExempt: rules.vatExempt,
+          offshore: rules.offshore,
+          tradeCompanyName: rules.tradeCompanyName,
+          tradeCommissionRate: rules.tradeCommissionRate
+        });
+      });
+      return rows;
+    }, []);
   }
 
   var customerMergeAliases = {
     "히가시노(무역회사)": "히가시노",
     "큐다호(무역회사)": "큐다호",
-    "스파이시(무역회사)": "스파이시"
+    "스파이시(무역회사)": "스파이시",
+    "노원 홀릭": "(노원) 홀릭",
+    "천호 썸": "(천호) 썸",
+    "일산 심쿵": "(일산) 심쿵",
+    "노원 심쿵": "(노원) 심쿵",
+    "잠실 심쿵": "(잠실) 심쿵"
   };
+
+  var customerDefaultAlwaysOverrides = {
+    "무드": true
+  };
+
+  function customerRegionVariants(customer) {
+    var names = splitRegionCustomerNames(customer && customer.name);
+    if (!names.length) return [];
+    return names.map(function (name) {
+      return normalizeCustomer(Object.assign({}, customer, {
+        id: stableCustomerId(name),
+        name: name
+      }));
+    });
+  }
+
+  function baseCustomerFromDefaults(name, discountRate) {
+    return {
+      id: stableCustomerId(name),
+      name: name,
+      discountRate: clamp(discountRate, 0, 100),
+      vatEnabled: false,
+      active: true,
+      note: "",
+      pricingRules: [],
+      discountRules: []
+    };
+  }
 
   var removedCustomerNames = {
     "노원(홀릭) 썸(천호)": true,
@@ -888,7 +982,7 @@
   function reconcileCustomerRenames(customers) {
     var next = [];
     var indexByName = {};
-    function addOrUpdate(customer) {
+    function addSingleCustomer(customer) {
       var cleanName = safeText(customer && customer.name);
       if (!cleanName || removedCustomerNames[cleanName]) return;
       var normalized = normalizeCustomer(Object.assign({}, customer, { name: cleanName }));
@@ -900,26 +994,37 @@
       }
       next[existingIndex] = Object.assign({}, next[existingIndex], normalized);
     }
+    function addOrUpdate(customer) {
+      customerRegionVariants(customer).forEach(addSingleCustomer);
+    }
     (customers || []).forEach(addOrUpdate);
     [
-      { name: "노원 홀릭", discountRate: 10 },
-      { name: "천호 썸", discountRate: 10 },
-      { name: "일산 심쿵", discountRate: 15 },
-      { name: "노원 심쿵", discountRate: 15 },
-      { name: "잠실 심쿵", discountRate: 5 }
+      { name: "(노원) 홀릭", discountRate: 10 },
+      { name: "(천호) 썸", discountRate: 10 },
+      { name: "(일산) 심쿵", discountRate: 15 },
+      { name: "(노원) 심쿵", discountRate: 15 },
+      { name: "(잠실) 심쿵", discountRate: 5 }
     ].forEach(function (entry) {
-      addOrUpdate({
-        id: stableCustomerId(entry.name),
-        name: entry.name,
-        discountRate: entry.discountRate,
-        vatEnabled: false,
-        active: true,
-        note: "",
-        pricingRules: [],
-        discountRules: []
-      });
+      addOrUpdate(baseCustomerFromDefaults(entry.name, entry.discountRate));
     });
     return next;
+  }
+
+  function ensureWalkinCustomer(customers) {
+    var walkin = normalizeCustomer({
+      id: "customer_walkin",
+      name: "\uC77C\uBC18",
+      discountRate: 0,
+      vatEnabled: false,
+      active: true,
+      note: "",
+      pricingRules: [],
+      discountRules: []
+    });
+    var rows = (customers || []).filter(function (customer) {
+      return customer && customer.id !== "customer_walkin" && customer.name !== walkin.name;
+    });
+    return [walkin].concat(rows);
   }
 
   function mergeCustomerAliases(customers) {
@@ -927,7 +1032,6 @@
     var indexByName = {};
     customers.forEach(function (customer) {
       var targetName = customerMergeAliases[customer.name] || customer.name;
-      if (targetName !== customer.name && indexByName[targetName] == null) return;
       var existingIndex = indexByName[targetName];
       if (existingIndex == null) {
         indexByName[targetName] = merged.length;
@@ -1075,31 +1179,32 @@
     var customers = Array.isArray(state.customers) ? state.customers.map(normalizeCustomer).filter(function (customer) { return customer.name; }) : clone(seed.customers).map(normalizeCustomer);
     customers = mergeCustomerAliases(customers);
     customers = reconcileCustomerRenames(customers);
+    customers = ensureWalkinCustomer(customers);
     var customerNameIndex = {};
     customers.forEach(function (customer, index) {
       customerNameIndex[customer.name] = index;
     });
-    if (shouldUpgrade) {
-      parseCustomerDefaults().forEach(function (defaultCustomer) {
-        var index = customerNameIndex[defaultCustomer.name];
-        if (index == null) {
-          customerNameIndex[defaultCustomer.name] = customers.length;
-          customers.push(defaultCustomer);
-        } else if (customers[index].id !== "customer_walkin") {
-          customers[index] = Object.assign({}, customers[index], {
-            discountRate: defaultCustomer.discountRate,
-            note: defaultCustomer.note,
-            pricingRules: defaultCustomer.pricingRules,
-            discountRules: defaultCustomer.discountRules,
-            vatExempt: defaultCustomer.vatExempt,
-            offshore: defaultCustomer.offshore,
-            tradeCompanyName: defaultCustomer.tradeCompanyName,
-            tradeCommissionRate: defaultCustomer.tradeCommissionRate,
-            active: customers[index].active === false ? false : true
-          });
-        }
-      });
-    }
+    parseCustomerDefaults().forEach(function (defaultCustomer) {
+      var forceDefault = !!customerDefaultAlwaysOverrides[defaultCustomer.name];
+      if (!shouldUpgrade && !forceDefault) return;
+      var index = customerNameIndex[defaultCustomer.name];
+      if (index == null) {
+        customerNameIndex[defaultCustomer.name] = customers.length;
+        customers.push(defaultCustomer);
+      } else if (customers[index].id !== "customer_walkin") {
+        customers[index] = Object.assign({}, customers[index], {
+          discountRate: defaultCustomer.discountRate,
+          note: forceDefault ? (customers[index].note || defaultCustomer.note) : defaultCustomer.note,
+          pricingRules: forceDefault && (customers[index].pricingRules || []).length ? customers[index].pricingRules : defaultCustomer.pricingRules,
+          discountRules: forceDefault && (customers[index].discountRules || []).length ? customers[index].discountRules : defaultCustomer.discountRules,
+          vatExempt: forceDefault ? customers[index].vatExempt || defaultCustomer.vatExempt : defaultCustomer.vatExempt,
+          offshore: forceDefault ? customers[index].offshore || defaultCustomer.offshore : defaultCustomer.offshore,
+          tradeCompanyName: forceDefault ? customers[index].tradeCompanyName || defaultCustomer.tradeCompanyName : defaultCustomer.tradeCompanyName,
+          tradeCommissionRate: forceDefault && customers[index].tradeCommissionRate ? customers[index].tradeCommissionRate : defaultCustomer.tradeCommissionRate,
+          active: customers[index].active === false ? false : true
+        });
+      }
+    });
     var groups = Array.isArray(state.groups) ? state.groups.slice() : [];
     items.forEach(function (item) {
       var groupName = safeText(item.groupName || "");
@@ -1109,7 +1214,8 @@
         groups.push({ id: id("group"), categoryId: item.categoryId, name: groupName, sort: item.sort || Date.now(), active: true });
       }
     });
-    return Object.assign({}, state, { categories: categories, items: items, customers: customers, writers: writers, groups: groups, dataVersion: DATA_VERSION });
+    var deletionLogs = Array.isArray(state.deletionLogs) ? state.deletionLogs.slice(0, 200) : [];
+    return Object.assign({}, state, { categories: categories, items: items, customers: customers, writers: writers, groups: groups, deletionLogs: deletionLogs, dataVersion: DATA_VERSION });
   }
 
   function loadState() {
@@ -1127,7 +1233,8 @@
         customers: Array.isArray(parsed.customers) ? parsed.customers : seed.customers,
         writers: Array.isArray(parsed.writers) ? parsed.writers : seed.writers,
         groups: Array.isArray(parsed.groups) ? parsed.groups : seed.groups,
-        sales: Array.isArray(parsed.sales) ? parsed.sales.slice(0, MAX_SALES) : []
+        sales: Array.isArray(parsed.sales) ? parsed.sales.slice(0, MAX_CACHED_SALES) : [],
+        deletionLogs: Array.isArray(parsed.deletionLogs) ? parsed.deletionLogs.slice(0, 200) : []
       }));
     } catch (error) {
       localStorage.removeItem(STORE_KEY);
@@ -1208,6 +1315,8 @@
     function lineIsShipping(line) {
       return line && (line.name === "배송" || line.name === "배송(양양)");
     }
+    var options = arguments.length > 2 && arguments[2] ? arguments[2] : {};
+    var excludesThresholdDiscount = thresholdBlockedCustomer(customer);
     var customerRate = Math.max(0, num(customer && customer.discountRate)) / 100;
     var hasExclusiveCustomerDiscount = customerRate > 0 || !!(customer && customer.offshore);
     var subtotal = cart.reduce(function (sum, line) {
@@ -1220,18 +1329,67 @@
       if (directDiscount > 0 || lineIsShipping(line)) return sum;
       return sum + basePrice * line.quantity;
     }, 0);
-    var thresholdRate = hasExclusiveCustomerDiscount ? 0 : thresholdEligibleSubtotal >= 1000000 ? 0.1 : thresholdEligibleSubtotal >= 500000 ? 0.05 : 0;
-    var thresholdDiscount = Math.round(thresholdEligibleSubtotal * thresholdRate);
-    var discount = cart.reduce(function (sum, line) {
-      var basePrice = line.originalPrice != null ? line.originalPrice : line.price;
-      var directDiscount = hasExclusiveCustomerDiscount ? 0 : Math.max(0, basePrice - line.price) * line.quantity;
-      if (!lineIsDiscountable(line)) return sum + directDiscount;
-      var lineCustomerRate = isCustomerDiscountExcluded(line, customer) ? 0 : customerRate;
-      return sum + directDiscount + Math.round(basePrice * line.quantity * lineCustomerRate);
-    }, 0) + thresholdDiscount;
-    var supply = subtotal - discount;
+    function discountForRatio(ratio) {
+      var adjustedThresholdSubtotal = Math.round(thresholdEligibleSubtotal * ratio);
+      var thresholdRate = options.thresholdRate != null ? num(options.thresholdRate) : hasExclusiveCustomerDiscount || excludesThresholdDiscount ? 0 : adjustedThresholdSubtotal >= 1000000 ? 0.1 : adjustedThresholdSubtotal >= 500000 ? 0.05 : 0;
+      var thresholdDiscount = Math.round(adjustedThresholdSubtotal * thresholdRate);
+      return cart.reduce(function (sum, line) {
+        var basePrice = line.originalPrice != null ? line.originalPrice : line.price;
+        var directDiscount = hasExclusiveCustomerDiscount ? 0 : Math.round(Math.max(0, basePrice - line.price) * line.quantity * ratio);
+        if (!lineIsDiscountable(line)) return sum + directDiscount;
+        var lineCustomerRate = isCustomerDiscountExcluded(line, customer) ? 0 : customerRate;
+        return sum + directDiscount + Math.round(basePrice * line.quantity * ratio * lineCustomerRate);
+      }, 0) + thresholdDiscount;
+    }
+    var deduction = Math.min(subtotal, Math.max(0, Math.round(num(options.deductionAmount))));
+    var remainingRatio = subtotal > 0 ? (subtotal - deduction) / subtotal : 0;
+    var beforeDeductionDiscount = discountForRatio(1);
+    var discount = discountForRatio(remainingRatio);
+    var beforeDeductionSupply = Math.max(0, subtotal - beforeDeductionDiscount);
+    var beforeDeductionVat = customer && customer.vatEnabled && !customer.offshore && !isVatExemptCustomer(customer) ? Math.round(beforeDeductionSupply * 0.1) : 0;
+    var beforeDeductionTotal = beforeDeductionSupply + beforeDeductionVat;
+    var deductionTaxIncluded = !!options.deductionTaxIncluded;
+    var supply = Math.max(0, subtotal - deduction - discount);
     var vat = customer && customer.vatEnabled && !customer.offshore && !isVatExemptCustomer(customer) ? Math.round(supply * 0.1) : 0;
-    return { subtotal: subtotal, discount: discount, supply: supply, vat: vat, total: supply + vat };
+    return { subtotal: subtotal, discount: discount, supply: supply, vat: vat, beforeDeductionSupply: beforeDeductionSupply, beforeDeductionTotal: beforeDeductionTotal, deduction: deduction, deductionTaxIncluded: deductionTaxIncluded, total: supply + vat };
+  }
+
+  function thresholdBlockedCustomer(customer) {
+    return safeText(customer && customer.name || "").replace(/\s+/g, "").indexOf("\uB0A8\uB3C4\uB9C8\uCF13") >= 0;
+  }
+
+  function thresholdEligibleSubtotal(cart) {
+    return (cart || []).reduce(function (sum, line) {
+      var basePrice = line.originalPrice != null ? line.originalPrice : line.price;
+      var directDiscount = Math.max(0, basePrice - line.price) * line.quantity;
+      if (directDiscount > 0 || line.name === "배송" || line.name === "배송(양양)") return sum;
+      return sum + basePrice * line.quantity;
+    }, 0);
+  }
+
+  function groupPurchaseEntryEligible(entry) {
+    var customer = entry && entry.customer || {};
+    return !thresholdBlockedCustomer(customer) && !num(customer.discountRate) && !customer.offshore && thresholdEligibleSubtotal(entry.lines || []) > 0;
+  }
+
+  function groupPurchaseRate(entries) {
+    var eligibleEntries = (entries || []).filter(groupPurchaseEntryEligible);
+    if (eligibleEntries.length < 2) return 0;
+    var eligibleSubtotal = eligibleEntries.reduce(function (sum, entry) {
+      return groupPurchaseEntryEligible(entry) ? sum + thresholdEligibleSubtotal(entry.lines || []) : sum;
+    }, 0);
+    return eligibleSubtotal >= 1000000 ? 0.1 : eligibleSubtotal >= 500000 ? 0.05 : 0;
+  }
+
+  function groupPurchaseTotals(entries) {
+    var rate = groupPurchaseRate(entries);
+    return (entries || []).map(function (entry) {
+      var appliedRate = groupPurchaseEntryEligible(entry) ? rate : 0;
+      return Object.assign({}, entry, {
+        groupPurchaseRate: appliedRate,
+        totals: totals(entry.lines || [], Object.assign({}, entry.customer, { vatEnabled: entry.vatEnabled }), { thresholdRate: appliedRate })
+      });
+    });
   }
 
   function itemDiscountable(categoryId, categories) {
@@ -1316,6 +1474,10 @@
     var printSale = printHook[0], setPrintSale = printHook[1];
     var catalogDiscountHook = React.useState(false);
     var catalogDiscount = catalogDiscountHook[0], setCatalogDiscount = catalogDiscountHook[1];
+    var groupPurchaseHook = React.useState([]);
+    var groupPurchaseEntries = groupPurchaseHook[0], setGroupPurchaseEntries = groupPurchaseHook[1];
+    var deductionHook = React.useState({ amount: 0, taxIncluded: false });
+    var deduction = deductionHook[0], setDeduction = deductionHook[1];
     var addQuantityHook = React.useState(null);
     var pendingItemAddition = addQuantityHook[0], setPendingItemAddition = addQuantityHook[1];
     var writerPromptHook = React.useState(false);
@@ -1333,8 +1495,6 @@
     var online = onlineHook[0], setOnline = onlineHook[1];
     var saveNoticeHook = React.useState(null);
     var saveNotice = saveNoticeHook[0], setSaveNotice = saveNoticeHook[1];
-    var deletionLogsHook = React.useState([]);
-    var deletionLogs = deletionLogsHook[0], setDeletionLogs = deletionLogsHook[1];
     var reviewHook = React.useState(null);
     var reviewDraft = reviewHook[0], setReviewDraft = reviewHook[1];
 
@@ -1377,14 +1537,15 @@
       return "Firebase 연결 중";
     }
 
-    function stateFromCloud(cloudState) {
+    function stateFromCloud(cloudState, currentSales) {
       return normalizeState(Object.assign(clone(seed), cloudState, {
         categories: Array.isArray(cloudState.categories) ? cloudState.categories : seed.categories,
         items: Array.isArray(cloudState.items) ? cloudState.items : seed.items,
         customers: Array.isArray(cloudState.customers) ? cloudState.customers : seed.customers,
         writers: Array.isArray(cloudState.writers) ? cloudState.writers : seed.writers,
         groups: Array.isArray(cloudState.groups) ? cloudState.groups : seed.groups,
-        sales: Array.isArray(cloudState.sales) ? cloudState.sales.slice(0, MAX_SALES) : []
+        sales: mergeSaleHistories(currentSales, Array.isArray(cloudState.sales) ? cloudState.sales : []),
+        deletionLogs: Array.isArray(cloudState.deletionLogs) ? cloudState.deletionLogs.slice(0, 200) : []
       }));
     }
 
@@ -1410,7 +1571,7 @@
             return current;
           }
           cloudApplyRef.current = true;
-          var nextState = stateFromCloud(cloudState);
+          var nextState = stateFromCloud(cloudState, current.sales);
           queueCatalogUpgrade(cloudState, nextState);
           return nextState;
         });
@@ -1427,7 +1588,7 @@
         rawSetState(function (current) {
           if (num(cloudState.clientUpdatedAt) <= num(current.clientUpdatedAt)) return current;
           cloudApplyRef.current = true;
-          var nextState = stateFromCloud(cloudState);
+          var nextState = stateFromCloud(cloudState, current.sales);
           queueCatalogUpgrade(cloudState, nextState);
           return nextState;
         });
@@ -1438,7 +1599,7 @@
       return subscribeSalesCollection(function (sales) {
         rawSetState(function (current) {
           return Object.assign({}, current, {
-            sales: sales.slice(0, MAX_SALES),
+            sales: sales.slice(),
             clientUpdatedAt: Math.max(num(current.clientUpdatedAt), sales.reduce(function (latest, sale) { return Math.max(latest, num(sale.cloudUpdatedAt)); }, 0))
           });
         });
@@ -1467,7 +1628,9 @@
     React.useEffect(function () {
       if (!settlementAccess) return undefined;
       return subscribeDeletionLogs(function (logs) {
-        setDeletionLogs(logs);
+        rawSetState(function (current) {
+          return Object.assign({}, current, { deletionLogs: logs.slice(0, 200) });
+        });
       });
     }, [settlementAccess]);
 
@@ -1518,7 +1681,7 @@
     }, [printSale, writerPromptOpen, pendingItemAddition, saleBeingEdited, mobileMenuOpen, activeTab]);
 
     var categories = (state.categories || []).filter(function (c) { return c.active; }).sort(function (a, b) { return a.sort - b.sort; });
-    var customers = (state.customers || []).filter(function (c) { return c.active; });
+    var customers = ensureWalkinCustomer((state.customers || []).filter(function (c) { return c.active; }));
     var writers = (state.writers || []).filter(function (writer) { return writer.active; });
     var manualCustomer = {
       id: MANUAL_CUSTOMER_ID,
@@ -1533,8 +1696,13 @@
     var items = (state.items || []).filter(function (item) { return item.active && item.categoryId === activeCategoryId; });
     var vatBlocked = isVatExemptCustomer(customer);
     var effectiveVatChecked = vatChecked && !vatBlocked;
-    var total = totals(cart, Object.assign({}, customer, { vatEnabled: effectiveVatChecked }));
+    var currentGroupEntries = groupPurchaseEntries.concat(cart.length ? [groupEntryFromCart(cart, customer, effectiveVatChecked)] : []);
+    var currentGroupTotals = groupPurchaseTotals(currentGroupEntries);
+    var currentGroupEntry = currentGroupTotals[currentGroupTotals.length - 1];
+    var groupPurchaseActive = groupPurchaseEntries.length > 0;
+    var total = groupPurchaseActive && cart.length && currentGroupEntry ? currentGroupEntry.totals : totals(cart, Object.assign({}, customer, { vatEnabled: effectiveVatChecked }), { deductionAmount: deduction.amount, deductionTaxIncluded: deduction.taxIncluded });
     var todaySummary = salesSummaryForDate(state.sales || [], new Date());
+    var sharedRecentCustomerIdsValue = sharedRecentCustomerIds(state.sales || [], recentCustomerIds);
 
     function selectCustomerWithVat(customerId) {
       setSelectedCustomerId(customerId);
@@ -1546,6 +1714,41 @@
           return next;
         });
       }
+    }
+
+    function groupEntryFromCart(lines, entryCustomer, entryVatEnabled) {
+      return {
+        id: id("group_entry"),
+        customer: Object.assign({}, entryCustomer),
+        customerId: entryCustomer.id,
+        customerName: entryCustomer.name,
+        vatEnabled: !!entryVatEnabled,
+        lines: clone(lines || [])
+      };
+    }
+
+    function addGroupPurchaseEntry() {
+      if (saleBeingEdited) {
+        alert("수정 중에는 공동구매를 사용할 수 없습니다.");
+        return;
+      }
+      if (!cart.length) {
+        alert("공동구매에 넣을 품목을 먼저 추가해 주세요.");
+        return;
+      }
+      var entry = groupEntryFromCart(cart, customer, effectiveVatChecked);
+      setGroupPurchaseEntries(function (current) { return current.concat([entry]); });
+      setCart([]);
+      setDeduction({ amount: 0, taxIncluded: false });
+    }
+
+    function removeGroupPurchaseEntry(entryId) {
+      setGroupPurchaseEntries(function (current) { return (current || []).filter(function (entry) { return entry.id !== entryId; }); });
+    }
+
+    function clearGroupPurchase() {
+      setGroupPurchaseEntries([]);
+      setDeduction({ amount: 0, taxIncluded: false });
     }
 
     function login(event) {
@@ -1632,8 +1835,68 @@
     function buildSaleDraft(saleWriter) {
       var shippingFee = 0;
       var saleTotal = total;
+      if (!saleBeingEdited && groupPurchaseEntries.length) {
+        var entries = groupPurchaseEntries.concat(cart.length ? [groupEntryFromCart(cart, customer, effectiveVatChecked)] : []);
+        var customerKeys = {};
+        entries.forEach(function (entry) { customerKeys[entry.customerId || entry.customerName] = true; });
+        if (Object.keys(customerKeys).length < 2) {
+          alert("공동구매는 서로 다른 거래처가 2곳 이상이어야 합니다.");
+          return null;
+        }
+        if (entries.filter(groupPurchaseEntryEligible).length < 2) {
+          alert("공동구매는 할인 없는 거래처 2곳 이상일 때만 가능합니다.");
+          return null;
+        }
+        var groupId = id("group_purchase");
+        var createdAt = new Date().toISOString();
+        var ratedEntries = groupPurchaseTotals(entries);
+        var sales = ratedEntries.map(function (entry, index) {
+          var entryCustomer = entry.customer || {};
+          var entryTotal = entry.totals;
+          return {
+            id: id("sale"),
+            createdAt: createdAt,
+            customerId: entry.customerId || entryCustomer.id,
+            customerName: entry.customerName || entryCustomer.name,
+            writerName: safeText(saleWriter.name),
+            discountRate: entryCustomer.discountRate,
+            customerNote: customerRuleSummary(entryCustomer),
+            customerPricingRules: entryCustomer.pricingRules || [],
+            customerDiscountRules: entryCustomer.discountRules || [],
+            vatEnabled: !!entry.vatEnabled,
+            vatExempt: isVatExemptCustomer(entryCustomer),
+            shippingFee: shippingFee,
+            offshoreSettlement: offshoreSettlementForTotal(entryTotal, entryCustomer),
+            lines: entry.lines || [],
+            totals: entryTotal,
+            groupPurchaseId: groupId,
+            groupPurchaseRate: entry.groupPurchaseRate || 0,
+            groupPurchaseIndex: index + 1,
+            groupPurchaseCount: ratedEntries.length
+          };
+        });
+        var groupTotal = sales.reduce(function (summary, sale) {
+          var totalsValue = sale.totals || {};
+          summary.subtotal += num(totalsValue.subtotal);
+          summary.discount += num(totalsValue.discount);
+          summary.supply += num(totalsValue.supply);
+          summary.vat += num(totalsValue.vat);
+          summary.total += num(totalsValue.total);
+          return summary;
+        }, { subtotal: 0, discount: 0, supply: 0, vat: 0, total: 0 });
+        return {
+          mode: "group",
+          writer: saleWriter,
+          sales: sales,
+          totals: groupTotal,
+          groupPurchaseRate: groupPurchaseRate(entries)
+        };
+      }
       if (saleBeingEdited) {
         var changes = saleEditChanges(saleBeingEdited, cart, customer, saleWriter, effectiveVatChecked, shippingFee);
+        var previousDeduction = saleBeingEdited.deduction || {};
+        if (num(previousDeduction.amount || (saleBeingEdited.totals || {}).deduction) !== num(saleTotal.deduction)) changes.push("차감: " + won(previousDeduction.amount || (saleBeingEdited.totals || {}).deduction) + " → " + won(saleTotal.deduction));
+        if (!!previousDeduction.taxIncluded !== !!saleTotal.deductionTaxIncluded && num(saleTotal.deduction)) changes.push("차감 세금: " + (previousDeduction.taxIncluded ? "포함" : "미포함") + " → " + (saleTotal.deductionTaxIncluded ? "포함" : "미포함"));
         return {
           mode: "edit",
           writer: saleWriter,
@@ -1651,6 +1914,7 @@
             vatEnabled: effectiveVatChecked,
             vatExempt: vatBlocked,
             shippingFee: shippingFee,
+            deduction: { amount: num(saleTotal.deduction), taxIncluded: !!saleTotal.deductionTaxIncluded },
             offshoreSettlement: offshoreSettlementForTotal(saleTotal, customer),
             lines: cart,
             totals: saleTotal
@@ -1675,6 +1939,7 @@
           vatEnabled: effectiveVatChecked,
           vatExempt: vatBlocked,
           shippingFee: shippingFee,
+          deduction: { amount: num(saleTotal.deduction), taxIncluded: !!saleTotal.deductionTaxIncluded },
           offshoreSettlement: offshoreSettlementForTotal(saleTotal, customer),
           lines: cart,
           totals: saleTotal
@@ -1683,7 +1948,7 @@
     }
 
     function requestSaveSale(writerOverride) {
-      if (!cart.length) {
+      if (!cart.length && !groupPurchaseEntries.length) {
         alert("품목을 먼저 추가해 주세요.");
         return;
       }
@@ -1693,6 +1958,7 @@
         return;
       }
       var draft = buildSaleDraft(saleWriter);
+      if (!draft) return;
       if (draft.mode === "edit" && !draft.changes.length) {
         alert("변경된 내용이 없습니다.");
         return;
@@ -1702,14 +1968,32 @@
     }
 
     function confirmSaveSale() {
-      if (!reviewDraft || !reviewDraft.sale) return;
+      if (!reviewDraft || (!reviewDraft.sale && !reviewDraft.sales)) return;
       var sale = reviewDraft.sale;
+      if (reviewDraft.mode === "group") {
+        var sales = reviewDraft.sales || [];
+        setState(function (current) { return Object.assign({}, current, { sales: sales.concat(current.sales || []) }); });
+        sales.forEach(function (entrySale) {
+          upsertSaleDocument(entrySale).then(function (ok) {
+            showSaveNotice(ok && online ? "success" : "warning", ok && online ? "공동구매 저장 완료" : "이 기기에 저장됨 · Firebase 연결 확인 필요");
+          });
+        });
+        setCart([]);
+        setGroupPurchaseEntries([]);
+        setDeduction({ amount: 0, taxIncluded: false });
+        setSelectedWriterId(reviewDraft.writer.id);
+        setWriterPromptOpen(false);
+        setReviewDraft(null);
+        setPrintSale(sales);
+        return;
+      }
       if (reviewDraft.mode === "edit") {
         updateSale(sale);
         upsertSaleDocument(sale).then(function (ok) {
           showSaveNotice(ok && online ? "success" : "warning", ok && online ? "수정 내역 저장 완료" : "이 기기에 저장됨 · Firebase 연결 확인 필요");
         });
         setCart([]);
+        setDeduction({ amount: 0, taxIncluded: false });
         setSelectedWriterId(reviewDraft.writer.id);
         setWriterPromptOpen(false);
         setSaleBeingEdited(null);
@@ -1717,11 +2001,12 @@
         setPrintSale(sale);
         return;
       }
-      setState(function (current) { return Object.assign({}, current, { sales: [sale].concat(current.sales).slice(0, MAX_SALES) }); });
+      setState(function (current) { return Object.assign({}, current, { sales: [sale].concat(current.sales) }); });
       upsertSaleDocument(sale).then(function (ok) {
         showSaveNotice(ok && online ? "success" : "warning", ok && online ? "판매 내역 저장 완료" : "이 기기에 저장됨 · Firebase 연결 확인 필요");
       });
       setCart([]);
+      setDeduction({ amount: 0, taxIncluded: false });
       setSelectedWriterId(reviewDraft.writer.id);
       setWriterPromptOpen(false);
       setReviewDraft(null);
@@ -1747,9 +2032,11 @@
         quantity: (sale.lines || []).reduce(function (sum, line) { return sum + num(line.quantity); }, 0)
       };
       setState(function (current) {
-        return Object.assign({}, current, { sales: (current.sales || []).filter(function (entry) { return entry.id !== sale.id; }) });
+        return Object.assign({}, current, {
+          sales: (current.sales || []).filter(function (entry) { return entry.id !== sale.id; }),
+          deletionLogs: [deletionLog].concat(current.deletionLogs || []).slice(0, 200)
+        });
       });
-      setDeletionLogs(function (current) { return [deletionLog].concat(current || []).slice(0, 200); });
       upsertDeletionLog(deletionLog);
       deleteSaleDocument(sale.id);
       setPrintSale(function (current) { return current && current.id === sale.id ? null : current; });
@@ -1816,6 +2103,11 @@
       }
       setSelectedWriterId(matchedWriter ? matchedWriter.id : "writer_default");
       setVatChecked(!!sale.vatEnabled);
+      var storedDeduction = sale.deduction || {};
+      setDeduction({
+        amount: num(storedDeduction.amount || (sale.totals || {}).deduction),
+        taxIncluded: Object.prototype.hasOwnProperty.call(storedDeduction, "taxIncluded") ? !!storedDeduction.taxIncluded : !!(sale.totals || {}).deductionTaxIncluded
+      });
       setActiveTab("sale");
       setMobileMenuOpen(false);
     }
@@ -1823,6 +2115,7 @@
     function cancelSaleEdit() {
       setSaleBeingEdited(null);
       setCart([]);
+      setDeduction({ amount: 0, taxIncluded: false });
     }
 
     function selectManualCustomer(name) {
@@ -1874,7 +2167,7 @@
           h("div", { className: "brand-row" },
             h("strong", null, state.store.name),
             h("span", null, "APK ready"),
-            h(CustomerPicker, { className: "header-customer", customers: customers, recentCustomerIds: recentCustomerIds, selectedCustomerId: selectedCustomerId, setSelectedCustomerId: selectCustomerWithVat, manualCustomerName: manualCustomerName, setManualCustomerName: setManualCustomerName, onManualCustomer: selectManualCustomer, compact: true })
+            h(CustomerPicker, { className: "header-customer", customers: customers, recentCustomerIds: sharedRecentCustomerIdsValue, selectedCustomerId: selectedCustomerId, setSelectedCustomerId: selectCustomerWithVat, manualCustomerName: manualCustomerName, setManualCustomerName: setManualCustomerName, onManualCustomer: selectManualCustomer, compact: true })
           ),
           h("button", { className: "mobile-menu-button", type: "button", "aria-label": "메뉴", "aria-expanded": mobileMenuOpen, onClick: function () { setMobileMenuOpen(!mobileMenuOpen); } },
             h("span", null),
@@ -1883,13 +2176,23 @@
           ),
           h("nav", { className: mobileMenuOpen ? "open" : "" },
             h("small", { className: "cloud-status " + (!online ? "offline" : cloudStatus) }, cloudStatusText()),
-            [["sale", "계산"], ["manage", "관리"], ["history", "내역"]].map(function (entry) {
+            [["sale", "계산"], ["manage", "관리"], ["history", "내역"], ["onlineQuotes", "웹 견적"]].map(function (entry) {
             return h("button", { key: entry[0], className: activeTab === entry[0] ? "active" : "", onClick: function () { setActiveTab(entry[0]); setMobileMenuOpen(false); } }, entry[1]);
           }))
         ),
-        activeTab === "sale" && h(SaleScreen, { categories: categories, activeCategoryId: activeCategoryId, setActiveCategoryId: setActiveCategoryId, items: items, customers: customers, recentCustomerIds: recentCustomerIds, selectedCustomerId: selectedCustomerId, setSelectedCustomerId: selectCustomerWithVat, manualCustomerName: manualCustomerName, setManualCustomerName: setManualCustomerName, onManualCustomer: selectManualCustomer, writers: writers, selectedWriterId: selectedWriterId, setSelectedWriterId: setSelectedWriterId, cart: cart, updateLine: updateLine, chooseItems: chooseItems, catalogDiscount: catalogDiscount, setCatalogDiscount: setCatalogDiscount, total: total, customer: customer, vatChecked: effectiveVatChecked, vatBlocked: vatBlocked, setVatChecked: setVatChecked, saveSale: requestSaveSale, clearCart: function () { setCart([]); }, totalQuantity: cart.reduce(function (sum, line) { return sum + num(line.quantity); }, 0), saleBeingEdited: saleBeingEdited, cancelSaleEdit: cancelSaleEdit, todaySummary: todaySummary }),
+        activeTab === "sale" && h(SaleScreen, { categories: categories, activeCategoryId: activeCategoryId, setActiveCategoryId: setActiveCategoryId, items: items, customers: customers, recentCustomerIds: sharedRecentCustomerIdsValue, selectedCustomerId: selectedCustomerId, setSelectedCustomerId: selectCustomerWithVat, manualCustomerName: manualCustomerName, setManualCustomerName: setManualCustomerName, onManualCustomer: selectManualCustomer, writers: writers, selectedWriterId: selectedWriterId, setSelectedWriterId: setSelectedWriterId, cart: cart, updateLine: updateLine, chooseItems: chooseItems, catalogDiscount: catalogDiscount, setCatalogDiscount: setCatalogDiscount, total: total, customer: customer, vatChecked: effectiveVatChecked, vatBlocked: vatBlocked, setVatChecked: setVatChecked, deduction: deduction, setDeduction: setDeduction, saveSale: requestSaveSale, clearCart: function () { setCart([]); setDeduction({ amount: 0, taxIncluded: false }); }, totalQuantity: cart.reduce(function (sum, line) { return sum + num(line.quantity); }, 0), saleBeingEdited: saleBeingEdited, cancelSaleEdit: cancelSaleEdit, todaySummary: todaySummary, canViewAggregateTotals: settlementAccess, groupPurchaseEntries: currentGroupTotals.slice(0, groupPurchaseEntries.length), groupPurchaseActive: groupPurchaseActive, groupPurchaseRate: groupPurchaseRate(currentGroupEntries), addGroupPurchaseEntry: addGroupPurchaseEntry, removeGroupPurchaseEntry: removeGroupPurchaseEntry, clearGroupPurchase: clearGroupPurchase }),
         activeTab === "manage" && h(ManageScreen, { state: state, setState: setState }),
-        activeTab === "history" && h(HistoryScreen, { sales: state.sales, deletionLogs: deletionLogs, setPrintSale: setPrintSale, settlementAccess: settlementAccess, deleteSale: deleteSale, beginSaleEdit: beginSaleEdit })
+        activeTab === "history" && h(HistoryScreen, { sales: state.sales, deletionLogs: state.deletionLogs || [], setPrintSale: setPrintSale, settlementAccess: settlementAccess, deleteSale: deleteSale, beginSaleEdit: beginSaleEdit }),
+        activeTab === "onlineQuotes" && (
+          window.PorsOnlineQuotes
+            ? h(window.PorsOnlineQuotes.Screen, {
+                online: online,
+                sales: state.sales
+              })
+            : h("main", { className: "online-quotes-unavailable" },
+                h("p", null, "웹 견적 화면을 불러오지 못했습니다.")
+              )
+        )
       ),
       printSale && h(PrintSheet, { sale: printSale, store: state.store, onClose: function () { setPrintSale(null); } }),
       saveNotice ? h("div", { className: "save-toast " + saveNotice.type, role: "status" }, saveNotice.message) : null,
@@ -1910,6 +2213,38 @@
   }
 
   function SaleReviewModal(props) {
+    if (props.draft.mode === "group") {
+      var sales = props.draft.sales || [];
+      var groupQuantity = sales.reduce(function (sum, sale) {
+        return sum + (sale.lines || []).reduce(function (lineSum, line) { return lineSum + num(line.quantity); }, 0);
+      }, 0);
+      var groupTotals = props.draft.totals || {};
+      return h("div", { className: "writer-modal", role: "dialog", "aria-modal": true },
+        h("section", { className: "writer-modal-card sale-review-card" },
+          h("h2", null, "공동구매 저장 전 확인"),
+          h("div", { className: "sale-review-grid" },
+            h("span", null, "거래처"), h("strong", null, sales.length + "곳"),
+            h("span", null, "작성자"), h("strong", null, props.draft.writer && props.draft.writer.name || "-"),
+            h("span", null, "품목/수량"), h("strong", null, sales.reduce(function (sum, sale) { return sum + (sale.lines || []).length; }, 0) + "종 · " + groupQuantity + "개"),
+            h("span", null, "공동할인"), h("strong", null, props.draft.groupPurchaseRate ? Math.round(props.draft.groupPurchaseRate * 100) + "%" : "없음"),
+            h("span", null, "상품합계"), h("strong", null, won(groupTotals.subtotal)),
+            h("span", null, "할인"), h("strong", null, "-" + won(groupTotals.discount)),
+            h("span", null, "VAT"), h("strong", null, won(groupTotals.vat)),
+            h("span", null, "총액"), h("b", null, won(groupTotals.total))
+          ),
+          h("div", { className: "sale-review-changes" },
+            h("strong", null, "거래처별 영수증"),
+            h("ul", null, sales.map(function (sale) {
+              return h("li", { key: sale.id }, (sale.customerName || "-") + " · " + won((sale.totals || {}).total) + (sale.groupPurchaseRate ? " · " + Math.round(sale.groupPurchaseRate * 100) + "% 적용" : " · 공동구매 제외"));
+            }))
+          ),
+          h("div", { className: "review-actions" },
+            h("button", { className: "ghost", type: "button", onClick: props.onClose }, "취소"),
+            h("button", { className: "primary", type: "button", onClick: props.onConfirm }, "확인 후 출력")
+          )
+        )
+      );
+    }
     var sale = props.draft.sale || {};
     var totalsValue = sale.totals || {};
     var lines = sale.lines || [];
@@ -1924,6 +2259,7 @@
           h("span", null, "상품합계"), h("strong", null, won(totalsValue.subtotal)),
           h("span", null, "할인"), h("strong", null, "-" + won(totalsValue.discount)),
           h("span", null, "VAT"), h("strong", null, won(totalsValue.vat)),
+          num(totalsValue.deduction) ? h(React.Fragment, null, h("span", null, "차감"), h("strong", null, "-" + won(totalsValue.deduction) + " · 세금 " + (totalsValue.deductionTaxIncluded ? "포함" : "미포함"))) : null,
           h("span", null, "총액"), h("b", null, won(totalsValue.total))
         ),
         props.draft.changes && props.draft.changes.length ? h("div", { className: "sale-review-changes" },
@@ -1965,6 +2301,47 @@
         h("div", { className: "add-quantity-actions" },
           h("button", { className: "ghost", type: "button", onClick: props.onClose }, "취소"),
           h("button", { className: "primary", type: "submit", disabled: parsedQuantity < 1 }, parsedQuantity > 0 ? parsedQuantity + "개 추가" : "추가")
+        )
+      )
+    );
+  }
+
+  function DeductionModal(props) {
+    var current = props.deduction || {};
+    var amountHook = React.useState(current.amount ? String(current.amount) : "");
+    var amount = amountHook[0], setAmount = amountHook[1];
+    var taxHook = React.useState(!!current.taxIncluded);
+    var taxIncluded = taxHook[0], setTaxIncluded = taxHook[1];
+    var maximum = Math.max(0, Math.round(num(props.maximum)));
+    var requested = Math.max(0, Math.round(num(amount)));
+    var applied = Math.min(maximum, requested);
+    function submit(event) {
+      event.preventDefault();
+      props.onConfirm({ amount: applied, taxIncluded: !!taxIncluded });
+    }
+    return h("div", { className: "writer-modal", role: "dialog", "aria-modal": true },
+      h("form", { className: "writer-modal-card deduction-modal", onSubmit: submit },
+        h("h2", null, "차감 금액"),
+        h("p", null, "차감 가능 원가 " + won(maximum)),
+        h("label", { className: "deduction-amount-field" },
+          h("span", null, "차감할 금액"),
+          h("input", {
+            value: amount,
+            inputMode: "numeric",
+            pattern: "[0-9]*",
+            autoFocus: true,
+            placeholder: "예: 10,000",
+            onChange: function (event) { setAmount(String(event.target.value || "").replace(/[^\d]/g, "").slice(0, 9)); }
+          }),
+          requested > maximum ? h("small", null, "총금액까지만 차감됩니다: " + won(applied)) : null
+        ),
+        h("label", { className: "deduction-tax-check" },
+          h("input", { type: "checkbox", checked: taxIncluded, onChange: function (event) { setTaxIncluded(event.target.checked); } }),
+          h("span", null, "VAT 포함")
+        ),
+        h("div", { className: "review-actions" },
+          h("button", { className: "ghost", type: "button", onClick: props.onClose }, "취소"),
+          h("button", { className: "deduction-confirm", type: "submit" }, applied ? won(applied) + " 차감" : "차감 해제")
         )
       )
     );
@@ -2043,16 +2420,33 @@
     }, [open]);
     function customerDisplayName(name) {
       var raw = String(name || "");
+      var regionMatch = raw.match(/^(\([^)）]+\))\s+(.+)$/);
+      if (regionMatch) {
+        return {
+          main: raw,
+          detail: ""
+        };
+      }
       var match = raw.match(/^(.*?)(\s*\(.+\))$/);
       return {
         main: match ? match[1].trim() : raw,
         detail: match ? match[2].trim() : ""
       };
     }
+    function customerNameSizeClass(name) {
+      var length = safeText(name).replace(/\s+/g, "").length;
+      return length >= 14 ? "customer-name-very-long" : length >= 9 ? "customer-name-long" : "";
+    }
+    function selectedCustomerDisplayName(name) {
+      var raw = safeText(name);
+      var regionMatch = raw.match(/^\([^)）]+\)\s+(.+)$/);
+      return regionMatch ? regionMatch[1].trim() : raw;
+    }
+    var selectedDisplayName = selectedCustomerDisplayName(selected.name);
     return h("div", { className: (props.className || "customer-picker") + (props.compact ? " compact" : "") },
       h("span", { className: "customer-picker-label" }, "거래처"),
       h("button", { className: "customer-picker-button", type: "button", onClick: function () { setOpen(true); } },
-        h("strong", null, selected.name || "거래처 선택"),
+        h("strong", { className: customerNameSizeClass(selectedDisplayName) }, selectedDisplayName || "거래처 선택"),
         h("small", null, selected.id === MANUAL_CUSTOMER_ID ? "수기 입력 · 할인 0%" : (selected.discountRate || 0) + "%" + (selected.note ? " · 기타" : "")),
         h("i", null, "⌄")
       ),
@@ -2072,7 +2466,7 @@
             h("div", { className: "frequent-customer-list" }, recentCustomers.map(function (customer) {
               var displayName = customerDisplayName(customer.name);
               return h("button", { key: customer.id, type: "button", className: customer.id === selected.id ? "active" : "", onClick: function () { choose(customer); } },
-                h("strong", null, displayName.main),
+                h("strong", { className: customerNameSizeClass(displayName.main) }, displayName.main),
                 displayName.detail ? h("small", null, displayName.detail) : null,
                 h("b", null, (customer.discountRate || 0) + "%")
               );
@@ -2082,7 +2476,7 @@
             filtered.length ? filtered.map(function (customer) {
               var displayName = customerDisplayName(customer.name);
               return h("button", { key: customer.id, type: "button", className: customer.id === selected.id ? "customer-result active" : "customer-result", onClick: function () { choose(customer); } },
-                h("strong", null, displayName.main),
+                h("strong", { className: customerNameSizeClass(displayName.main) }, displayName.main),
                 displayName.detail ? h("small", null, displayName.detail) : null,
                 h("b", null, "할인률 " + (customer.discountRate || 0) + "%")
               );
@@ -2094,6 +2488,8 @@
   }
 
   function SaleScreen(props) {
+    var deductionOpenHook = React.useState(false);
+    var deductionOpen = deductionOpenHook[0], setDeductionOpen = deductionOpenHook[1];
     var swipeStartHook = React.useState(null);
     var swipeStart = swipeStartHook[0], setSwipeStart = swipeStartHook[1];
     var slideHook = React.useState("");
@@ -2184,14 +2580,14 @@
       );
     }
     var customerNote = customerRuleSummary(props.customer);
-    return h("main", { className: "sale-grid" },
+    return h(React.Fragment, null, h("main", { className: "sale-grid" },
       h("section", { className: "catalog-panel" },
-        h("div", { className: "today-summary" },
+        h("div", { className: props.canViewAggregateTotals ? "today-summary" : "today-summary totals-hidden" },
           h("span", null, "오늘"),
           h("strong", null, (props.todaySummary && props.todaySummary.count || 0) + "건"),
           h("strong", null, (props.todaySummary && props.todaySummary.quantity || 0) + "개"),
-          h("b", null, won(props.todaySummary && props.todaySummary.total || 0)),
-          h("small", null, "VAT " + won(props.todaySummary && props.todaySummary.vat || 0))
+          props.canViewAggregateTotals ? h("b", null, won(props.todaySummary && props.todaySummary.total || 0)) : null,
+          props.canViewAggregateTotals ? h("small", null, "VAT " + won(props.todaySummary && props.todaySummary.vat || 0)) : null
         ),
         h("div", { className: "catalog-toolbar" },
           h("div", { className: "category-tabs" }, props.categories.map(function (c) {
@@ -2225,17 +2621,34 @@
         ),
         props.selectedWriterId === "writer_default" ? h("small", { className: "writer-note" }, "미정일 경우 저장 및 출력이 안됩니다.") : null,
         customerNote ? h("small", { className: "customer-note" }, customerNote) : null,
+        !props.saleBeingEdited ? h("div", { className: props.groupPurchaseActive ? "group-purchase-box active" : "group-purchase-box" },
+          h("div", { className: "group-purchase-head" },
+            h("strong", null, "공동구매"),
+            h("button", { type: "button", className: "group-purchase-add", disabled: !props.cart.length, onClick: props.addGroupPurchaseEntry }, "현재 거래처 추가"),
+            h("span", null, props.groupPurchaseRate ? Math.round(props.groupPurchaseRate * 100) + "% 적용" : "합산 대기")
+          ),
+          props.groupPurchaseEntries && props.groupPurchaseEntries.length ? h("div", { className: "group-purchase-list" }, props.groupPurchaseEntries.map(function (entry, index) {
+            return h("div", { key: entry.id, className: "group-purchase-entry" },
+              h("span", null, (index + 1) + ". " + (entry.customerName || "-")),
+              h("b", null, won((entry.totals || {}).subtotal)),
+              h("small", null, entry.groupPurchaseRate ? Math.round(entry.groupPurchaseRate * 100) + "% 할인" : groupPurchaseEntryEligible(entry) ? "합산 대기" : "할인 거래처 제외"),
+              h("button", { type: "button", onClick: function () { props.removeGroupPurchaseEntry(entry.id); } }, "삭제")
+            );
+          })) : null,
+          props.groupPurchaseActive ? h("button", { type: "button", className: "group-purchase-clear", onClick: props.clearGroupPurchase }, "취소") : null
+        ) : null,
         h("div", { className: "cart-lines", ref: cartLinesRef }, props.cart.length ? props.cart.map(function (line, index) {
           return h(CartLine, { key: line.id, index: index, line: line, updateLine: props.updateLine, newest: index === props.cart.length - 1 });
         }) : h("p", { className: "empty" }, "품목을 눌러 장바구니에 담아 주세요.")),
         h(Totals, { total: props.total, totalQuantity: props.totalQuantity, customer: props.customer, vatChecked: props.vatChecked, vatBlocked: props.vatBlocked, setVatChecked: props.setVatChecked }),
         props.saleBeingEdited ? h("small", { className: "sale-edit-notice" }, "기존 내역 수정 중 · 품목을 추가하거나 삭제한 뒤 다시 저장하세요.") : null,
         h("div", { className: "action-row" },
-          h("button", { className: "ghost", onClick: props.saleBeingEdited ? props.cancelSaleEdit : props.clearCart }, props.saleBeingEdited ? "수정 취소" : "비우기"),
-          h("button", { className: "primary", onClick: function () { props.saveSale(); } }, h(Icon, { name: "print" }), props.saleBeingEdited ? "수정 저장/출력" : "저장/출력")
+          h("button", { className: "ghost", onClick: props.saleBeingEdited ? props.cancelSaleEdit : props.groupPurchaseActive ? function () { props.clearGroupPurchase(); props.clearCart(); } : props.clearCart }, props.saleBeingEdited ? "수정 취소" : props.groupPurchaseActive ? "공동구매 비우기" : "비우기"),
+          h("button", { className: "primary", onClick: function () { props.saveSale(); } }, h(Icon, { name: "print" }), props.saleBeingEdited ? "수정 저장/출력" : props.groupPurchaseActive ? "공동구매 저장/출력" : "저장/출력"),
+          h("button", { className: "deduction-button", type: "button", disabled: !props.cart.length || props.groupPurchaseActive, title: props.groupPurchaseActive ? "공동구매 차감은 지원하지 않습니다." : "차감 금액 입력", onClick: function () { setDeductionOpen(true); } }, "차감")
         )
       )
-    );
+    ), deductionOpen ? h(DeductionModal, { deduction: props.deduction, maximum: props.total.subtotal, onConfirm: function (nextDeduction) { props.setDeduction(nextDeduction); setDeductionOpen(false); }, onClose: function () { setDeductionOpen(false); } }) : null);
   }
 
   function CartLine(props) {
@@ -2292,17 +2705,18 @@
   }
 
   function Totals(props) {
-    return h("dl", { className: "totals" },
-      row("상품 합계", won(props.total.subtotal)),
-      row("할인", "-" + won(props.total.discount)),
-      row("총금액", won(props.total.total)),
+    return h("dl", { className: num(props.total.deduction) ? "totals has-deduction" : "totals" },
+      row("상품 합계", won(props.total.subtotal), "totals-subtotal"),
+      row("할인", "-" + won(props.total.discount), "totals-discount"),
+      num(props.total.deduction) ? row("차감", "-" + won(props.total.deduction), "totals-deduction") : null,
+      row("총금액", won(props.total.total), "totals-total"),
       h("div", { className: "vat-toggle-row" }, h("dt", null, "VAT"), h("dd", null, h("label", { className: props.vatBlocked ? "vat-check disabled" : "vat-check" }, h("input", { type: "checkbox", checked: props.vatChecked && !props.vatBlocked, disabled: props.vatBlocked, onChange: function (e) { if (!props.vatBlocked) props.setVatChecked(e.target.checked); } }), h("span", { className: "vat-amount" }, props.vatBlocked ? "VAT 없음" : won(props.total.vat))))),
       h("div", { className: "grand" }, h("dt", null, "총"), h("dd", null, (props.totalQuantity || 0) + "개"))
     );
   }
 
-  function row(label, value) {
-    return h("div", null, h("dt", null, label), h("dd", null, value));
+  function row(label, value, className) {
+    return h("div", { className: className || undefined }, h("dt", null, label), h("dd", null, value));
   }
 
   function ManageScreen(props) {
@@ -2313,6 +2727,8 @@
     var activeForm = activeFormHook[0], setActiveForm = activeFormHook[1];
     var itemCategoryHook = React.useState("");
     var itemCategoryId = itemCategoryHook[0], setItemCategoryId = itemCategoryHook[1];
+    var customerSearchHook = React.useState("");
+    var customerSearch = customerSearchHook[0], setCustomerSearch = customerSearchHook[1];
     var editingHook = React.useState(null);
     var editing = editingHook[0], setEditing = editingHook[1];
     var backupInputRef = React.useRef(null);
@@ -2333,6 +2749,7 @@
     function selectList(key) {
       setActiveList(key);
       setEditing(null);
+      if (key !== "customers") setCustomerSearch("");
     }
     React.useEffect(function () {
       return registerMobileBackHandler(function () {
@@ -2432,6 +2849,19 @@
       });
       if (editing && editing.type === "customers" && editing.id === customerId) setEditing(null);
     }
+    function deleteWriter(writerId) {
+      var target = writers.find(function (writer) { return writer.id === writerId; });
+      if (!target) return;
+      if (target.id === "writer_default") {
+        alert("미정 작성자는 기본값이라 삭제할 수 없습니다.");
+        return;
+      }
+      if (!window.confirm(target.name + " 작성자를 삭제할까요? 기존 판매 내역과 영수증의 작성자명은 유지됩니다.")) return;
+      setState(function (current) {
+        return Object.assign({}, current, { writers: (current.writers || []).filter(function (writer) { return writer.id !== writerId; }) });
+      });
+      if (editing && editing.type === "writers" && editing.id === writerId) setEditing(null);
+    }
     function moveCategory(categoryId, direction) {
       setState(function (current) {
         var categories = (current.categories || []).slice().sort(function (a, b) { return a.sort - b.sort; });
@@ -2499,12 +2929,19 @@
     }).map(function (i) {
       return { id: i.id, categoryId: i.categoryId, name: (i.groupName ? i.groupName + " · " : "") + i.name, meta: won(i.price) };
     });
+    var customerSearchKeyValue = customerSearchKey(customerSearch);
+    var customerRows = customers.map(function (c) {
+      return { id: c.id, name: c.name, meta: c.discountRate + "%", note: customerRuleSummary(c) };
+    }).filter(function (row) {
+      if (!customerSearchKeyValue) return true;
+      return customerSearchKey(row.name).indexOf(customerSearchKeyValue) >= 0 || customerSearchKey(row.note).indexOf(customerSearchKeyValue) >= 0 || String(row.meta || "").indexOf(customerSearchKeyValue) >= 0;
+    });
     var adminSections = [
       { key: "categories", listKind: "categories", title: "카테고리", rows: categories.slice().sort(function (a, b) { return a.sort - b.sort; }).map(function (c) { return { id: c.id, name: c.name, meta: c.discountableDefault === false ? "할인 불가" : "" }; }), onEdit: function (idValue) { openEditor("categories", idValue); }, onDelete: deleteCategory, onMove: moveCategory },
       { key: "groups", listKind: "groups", title: "세부 카테고리", rows: groupRows, onEdit: function (idValue) { openEditor("groups", idValue); }, onDelete: deleteGroup },
       { key: "items", listKind: "items", title: "품목", rows: itemRows, categories: categories.slice().sort(function (a, b) { return a.sort - b.sort; }), activeCategoryId: itemFilterCategoryId, setActiveCategoryId: setItemCategoryId, onEdit: function (idValue) { openEditor("items", idValue); }, onDelete: deleteItem, onBulkDelete: deleteItems },
-      { key: "customers", listKind: "customers", title: "거래처", rows: customers.map(function (c) { return { id: c.id, name: c.name, meta: c.discountRate + "%", note: customerRuleSummary(c) }; }), onEdit: function (idValue) { openEditor("customers", idValue); }, onDelete: deleteCustomer },
-      { key: "writers", listKind: "writers", title: "작성자", rows: writers.map(function (writer) { return { id: writer.id, name: writer.name, meta: writer.id === "writer_default" ? "기본값" : "" }; }), onEdit: function (idValue) { openEditor("writers", idValue); } }
+      { key: "customers", listKind: "customers", title: "거래처", rows: customerRows, searchValue: customerSearch, onSearchChange: setCustomerSearch, searchPlaceholder: "거래처명 검색", onEdit: function (idValue) { openEditor("customers", idValue); }, onDelete: deleteCustomer },
+      { key: "writers", listKind: "writers", title: "작성자", rows: writers.map(function (writer) { return { id: writer.id, name: writer.name, meta: writer.id === "writer_default" ? "기본값" : "", canDelete: writer.id !== "writer_default" }; }), onEdit: function (idValue) { openEditor("writers", idValue); }, onDelete: deleteWriter }
     ];
     var selectedSection = adminSections.find(function (section) { return section.key === activeList; }) || adminSections[0];
     var formSections = [
@@ -2708,6 +3145,14 @@
         h("small", { className: "list-count" }, (props.rows || []).length + "개"),
         props.onBulkDelete ? h("button", { className: "delete-row", disabled: !selected.length, onClick: bulkDelete }, "선택 삭제 " + selected.length) : null
       ),
+      props.onSearchChange ? h("div", { className: "admin-list-search" },
+        h("input", {
+          value: props.searchValue || "",
+          onChange: function (event) { props.onSearchChange(event.target.value); },
+          placeholder: props.searchPlaceholder || "검색"
+        }),
+        props.searchValue ? h("button", { type: "button", onClick: function () { props.onSearchChange(""); } }, "지우기") : null
+      ) : null,
       props.listKind === "items" ? h("div", { className: "admin-category-tabs" }, (props.categories || []).map(function (category) {
         return h("button", {
           key: category.id,
@@ -2725,7 +3170,7 @@
           h("strong", null, r.meta),
           h("div", { className: "admin-item-actions" },
             props.onEdit ? h("button", { className: "edit-row", onClick: function () { props.onEdit(r.id); } }, "수정") : null,
-            props.onDelete ? h("button", { className: "delete-row", onClick: function () { props.onDelete(r.id); } }, "삭제") : null
+            props.onDelete && r.canDelete !== false ? h("button", { className: "delete-row", onClick: function () { props.onDelete(r.id); } }, "삭제") : null
           )
         );
       })) : (props.rows || []).length ? (props.rows || []).map(function (r) {
@@ -2736,7 +3181,7 @@
         props.onMove ? h("button", { className: "edit-row move-row", onClick: function () { props.onMove(r.id, -1); } }, "↑") : null,
         props.onMove ? h("button", { className: "edit-row move-row", onClick: function () { props.onMove(r.id, 1); } }, "↓") : null,
         props.onEdit ? h("button", { className: "edit-row", onClick: function () { props.onEdit(r.id); } }, "수정") : null,
-        props.onDelete ? h("button", { className: "delete-row", onClick: function () { props.onDelete(r.id); } }, "삭제") : null
+        props.onDelete && r.canDelete !== false ? h("button", { className: "delete-row", onClick: function () { props.onDelete(r.id); } }, "삭제") : null
       );
     }) : h("p", { className: "admin-empty" }, "등록된 항목이 없습니다."));
   }
@@ -2760,10 +3205,15 @@
     var calendarMonth = calendarMonthHook[0], setCalendarMonth = calendarMonthHook[1];
     var settleHook = React.useState(false);
     var showSettlement = settleHook[0], setShowSettlement = settleHook[1];
-    var periodHook = React.useState("month");
-    var settlementPeriod = periodHook[0], setSettlementPeriod = periodHook[1];
     var vatFilterHook = React.useState("all");
     var settlementVatFilter = vatFilterHook[0], setSettlementVatFilter = vatFilterHook[1];
+    var trendMetricHook = React.useState("total");
+    var trendMetric = trendMetricHook[0], setTrendMetric = trendMetricHook[1];
+    var settlementMetricsHook = React.useState(false);
+    var settlementMetricsOpen = settlementMetricsHook[0], setSettlementMetricsOpen = settlementMetricsHook[1];
+    var trendPointHook = React.useState(null);
+    var selectedTrendIndex = trendPointHook[0], setSelectedTrendIndex = trendPointHook[1];
+    var trendDraggingRef = React.useRef(false);
     var editHook = React.useState(null);
     var editingSale = editHook[0], setEditingSale = editHook[1];
     var auditHook = React.useState(null);
@@ -2774,6 +3224,12 @@
     var deleteTarget = deleteTargetHook[0], setDeleteTarget = deleteTargetHook[1];
     var deleteReasonHook = React.useState("");
     var deleteReason = deleteReasonHook[0], setDeleteReason = deleteReasonHook[1];
+    var expandedHistoryHook = React.useState(null);
+    var expandedHistorySaleId = expandedHistoryHook[0], setExpandedHistorySaleId = expandedHistoryHook[1];
+    var expandedHistoryDateHook = React.useState(null);
+    var expandedHistoryDateKey = expandedHistoryDateHook[0], setExpandedHistoryDateKey = expandedHistoryDateHook[1];
+    var expandedHistoryMonthHook = React.useState(null);
+    var expandedHistoryMonthKey = expandedHistoryMonthHook[0], setExpandedHistoryMonthKey = expandedHistoryMonthHook[1];
     React.useEffect(function () {
       if (!editingSale && !auditSale && !deletionLogOpen && !deleteTarget) return undefined;
       return registerMobileBackHandler(function () {
@@ -2875,7 +3331,13 @@
       var now = new Date();
       var start = startOfDay(now);
       var end = endOfDay(now);
-      if (period === "week") {
+      if (period === "all") {
+        var saleDates = sortedSales.map(function (sale) { return new Date(sale.createdAt); }).filter(function (date) { return !Number.isNaN(date.getTime()); });
+        if (saleDates.length) {
+          start = startOfDay(new Date(Math.min.apply(null, saleDates.map(function (date) { return date.getTime(); }))));
+          end = endOfDay(new Date(Math.max.apply(null, saleDates.map(function (date) { return date.getTime(); }))));
+        }
+      } else if (period === "week") {
         var day = now.getDay() || 7;
         start = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1));
         end = endOfDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6));
@@ -2945,6 +3407,79 @@
       if (!query) return true;
       return sale.customerName.indexOf(query) >= 0 || (sale.customerNote || "").indexOf(query) >= 0 || (sale.writerName || "").indexOf(query) >= 0 || lines.some(function (line) { return line.name.indexOf(query) >= 0; });
     });
+    function addSaleToHistoryGroup(group, sale) {
+      group.sales.push(sale);
+      group.quantity += (sale.lines || []).reduce(function (sum, line) { return sum + num(line.quantity); }, 0);
+      group.total += num((sale.totals || {}).total);
+    }
+    function historyWeekInfo(date) {
+      var year = date.getFullYear();
+      var month = date.getMonth();
+      var monthStart = new Date(year, month, 1);
+      var monthEnd = new Date(year, month + 1, 0);
+      var firstMondayOffset = (monthStart.getDay() + 6) % 7;
+      var weekNumber = Math.floor((date.getDate() + firstMondayOffset - 1) / 7) + 1;
+      var dayFromMonday = (date.getDay() + 6) % 7;
+      var weekStart = new Date(year, month, date.getDate() - dayFromMonday);
+      var weekEnd = new Date(year, month, date.getDate() + 6 - dayFromMonday);
+      if (weekStart < monthStart) weekStart = monthStart;
+      if (weekEnd > monthEnd) weekEnd = monthEnd;
+      var ordinal = ["첫째", "둘째", "셋째", "넷째", "다섯째", "여섯째"][weekNumber - 1] || weekNumber + "째";
+      return {
+        key: year + "-" + String(month + 1).padStart(2, "0") + "-week-" + weekNumber,
+        label: (month + 1) + "월 " + ordinal + "주 (" + weekStart.getDate() + "일~" + weekEnd.getDate() + "일)"
+      };
+    }
+    var historyDayGroups = [];
+    var historyDayGroupMap = {};
+    var historyMonthGroups = [];
+    var historyMonthGroupMap = {};
+    filtered.forEach(function (sale) {
+      var saleDate = new Date(sale.createdAt);
+      var dateKey = Number.isNaN(saleDate.getTime()) ? "unknown" : inputDateValue(saleDate);
+      if (!historyDayGroupMap[dateKey]) {
+        historyDayGroupMap[dateKey] = {
+          key: dateKey,
+          label: Number.isNaN(saleDate.getTime()) ? "날짜 없음" : saleDate.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }),
+          sales: [],
+          quantity: 0,
+          total: 0
+        };
+        historyDayGroups.push(historyDayGroupMap[dateKey]);
+      }
+      addSaleToHistoryGroup(historyDayGroupMap[dateKey], sale);
+      if (Number.isNaN(saleDate.getTime())) return;
+      var monthKey = saleDate.getFullYear() + "-" + String(saleDate.getMonth() + 1).padStart(2, "0");
+      if (!historyMonthGroupMap[monthKey]) {
+        historyMonthGroupMap[monthKey] = {
+          key: "month-" + monthKey,
+          label: (saleDate.getMonth() + 1) + "월",
+          sales: [],
+          quantity: 0,
+          total: 0,
+          weeks: [],
+          weekMap: {}
+        };
+        historyMonthGroups.push(historyMonthGroupMap[monthKey]);
+      }
+      var monthGroup = historyMonthGroupMap[monthKey];
+      addSaleToHistoryGroup(monthGroup, sale);
+      var weekInfo = historyWeekInfo(saleDate);
+      if (!monthGroup.weekMap[weekInfo.key]) {
+        monthGroup.weekMap[weekInfo.key] = { key: weekInfo.key, label: weekInfo.label, sales: [], quantity: 0, total: 0 };
+        monthGroup.weeks.push(monthGroup.weekMap[weekInfo.key]);
+      }
+      addSaleToHistoryGroup(monthGroup.weekMap[weekInfo.key], sale);
+    });
+    var monthHistoryGroups = historyMonthGroups.length ? historyMonthGroups[0].weeks : [];
+    var firstHistoryGroupKey = historyPeriod === "month" ? (monthHistoryGroups[0] || {}).key : (historyDayGroups[0] || {}).key;
+    var firstHistoryMonthKey = (historyMonthGroups[0] || {}).key || null;
+    React.useEffect(function () {
+      setExpandedHistoryMonthKey(historyPeriod === "all" ? firstHistoryMonthKey : null);
+      var singleCustomDay = historyPeriod === "range" && customRange.from && customRange.from === customRange.to;
+      setExpandedHistoryDateKey(singleCustomDay ? firstHistoryGroupKey : null);
+      setExpandedHistorySaleId(null);
+    }, [historyPeriod, customRange.from, customRange.to, query, firstHistoryGroupKey, firstHistoryMonthKey]);
     var settlementSales = filtered.filter(function (sale) {
       var vat = num((sale.totals || {}).vat);
       if (settlementVatFilter === "vat") return vat > 0;
@@ -2965,27 +3500,27 @@
       var week = Math.ceil((((target - yearStart) / 86400000) + 1) / 7);
       return String(target.getFullYear()).slice(2) + "." + String(week).padStart(2, "0") + "주";
     }
-    function periodKey(sale) {
-      var date = new Date(sale.createdAt);
-      if (Number.isNaN(date.getTime())) return "-";
-      if (settlementPeriod === "day") return shortDate(sale.createdAt);
-      if (settlementPeriod === "week") return weekKey(date);
-      if (settlementPeriod === "all") return "전체";
-      return String(date.getFullYear()).slice(2) + "." + String(date.getMonth() + 1).padStart(2, "0");
+    function settlementRangeLabel() {
+      if (historyPeriod === "today") return "오늘";
+      if (historyPeriod === "week") return "이번 주";
+      if (historyPeriod === "month") return "이번 달";
+      if (historyPeriod === "all") return "전체 기간";
+      return displayInputDate(customRange.from) + " ~ " + displayInputDate(customRange.to || customRange.from);
     }
     function settlementRows() {
       var map = {};
       settlementSales.forEach(function (sale) {
-        var key = periodKey(sale) + "||" + (sale.customerName || "-");
+        var key = sale.customerName || "-";
         var totalsValue = sale.totals || {};
         if (!map[key]) {
           map[key] = {
-            period: periodKey(sale),
+            period: settlementRangeLabel(),
             customerName: sale.customerName || "-",
             count: 0,
             quantity: 0,
             subtotal: 0,
             discount: 0,
+            deduction: 0,
             supply: 0,
             vat: 0,
             total: 0,
@@ -3002,6 +3537,7 @@
         map[key].quantity += (sale.lines || []).reduce(function (sum, line) { return sum + num(line.quantity); }, 0);
         map[key].subtotal += num(totalsValue.subtotal);
         map[key].discount += num(totalsValue.discount);
+        map[key].deduction += num(totalsValue.deduction);
         map[key].supply += num(totalsValue.supply);
         map[key].vat += num(totalsValue.vat);
         map[key].total += num(totalsValue.total);
@@ -3011,7 +3547,7 @@
         map[key].offshoreVat += num(offshore.vat);
       });
       return Object.keys(map).map(function (key) { return map[key]; }).sort(function (a, b) {
-        if (a.period !== b.period) return a.period < b.period ? 1 : -1;
+        if (a.total !== b.total) return b.total - a.total;
         return a.customerName.localeCompare(b.customerName, "ko-KR");
       });
     }
@@ -3022,6 +3558,7 @@
         quantity: sum.quantity + row.quantity,
         subtotal: sum.subtotal + row.subtotal,
         discount: sum.discount + row.discount,
+        deduction: sum.deduction + row.deduction,
         supply: sum.supply + row.supply,
         vat: sum.vat + row.vat,
         total: sum.total + row.total,
@@ -3030,11 +3567,251 @@
         offshoreReceivable: sum.offshoreReceivable + row.offshoreReceivable,
         offshoreVat: sum.offshoreVat + row.offshoreVat
       };
-    }, { count: 0, quantity: 0, subtotal: 0, discount: 0, supply: 0, vat: 0, total: 0, offshoreJapanAmount: 0, offshoreCommission: 0, offshoreReceivable: 0, offshoreVat: 0 });
+    }, { count: 0, quantity: 0, subtotal: 0, discount: 0, deduction: 0, supply: 0, vat: 0, total: 0, offshoreJapanAmount: 0, offshoreCommission: 0, offshoreReceivable: 0, offshoreVat: 0 });
+    var averageSale = grand.count ? Math.round(grand.total / grand.count) : 0;
+    var discountRate = grand.subtotal ? grand.discount / grand.subtotal * 100 : 0;
+    var vatRate = grand.total ? grand.vat / grand.total * 100 : 0;
+    function compactWon(value) {
+      var amount = Math.round(num(value));
+      if (Math.abs(amount) >= 100000000) return "₩" + (amount / 100000000).toFixed(Math.abs(amount) >= 1000000000 ? 0 : 1).replace(/\.0$/, "") + "억";
+      if (Math.abs(amount) >= 10000) return "₩" + Math.round(amount / 10000).toLocaleString("ko-KR") + "만";
+      return won(amount);
+    }
+    function trendBucket(sale) {
+      var date = new Date(sale.createdAt);
+      if (Number.isNaN(date.getTime())) return null;
+      if (historyPeriod === "today") {
+        return {
+          key: inputDateValue(date) + "-" + String(date.getHours()).padStart(2, "0"),
+          label: String(date.getHours()).padStart(2, "0") + "시",
+          stamp: new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()).getTime()
+        };
+      }
+      if (historyPeriod === "all") {
+        return {
+          key: date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0"),
+          label: String(date.getFullYear()).slice(2) + "." + String(date.getMonth() + 1).padStart(2, "0"),
+          stamp: new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+        };
+      }
+      var rangeStart = parseInputDate(customRange.from);
+      var rangeEnd = parseInputDate(customRange.to || customRange.from);
+      var rangeDays = rangeStart && rangeEnd ? Math.round((rangeEnd - rangeStart) / 86400000) + 1 : 1;
+      if (historyPeriod === "range" && rangeDays > 370) {
+        return {
+          key: date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0"),
+          label: String(date.getFullYear()).slice(2) + "." + String(date.getMonth() + 1).padStart(2, "0"),
+          stamp: new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+        };
+      }
+      if (historyPeriod === "range" && rangeDays > 62) {
+        var weekTarget = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        var weekDay = weekTarget.getDay() || 7;
+        weekTarget.setDate(weekTarget.getDate() - weekDay + 1);
+        return { key: weekKey(date), label: weekKey(date), stamp: weekTarget.getTime() };
+      }
+      return {
+        key: inputDateValue(date),
+        label: String(date.getMonth() + 1).padStart(2, "0") + "." + String(date.getDate()).padStart(2, "0"),
+        stamp: new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+      };
+    }
+    var trendMap = {};
+    settlementSales.forEach(function (sale) {
+      var bucket = trendBucket(sale);
+      if (!bucket) return;
+      if (!trendMap[bucket.key]) trendMap[bucket.key] = { key: bucket.key, label: bucket.label, stamp: bucket.stamp, total: 0, count: 0, quantity: 0 };
+      trendMap[bucket.key].total += num((sale.totals || {}).total);
+      trendMap[bucket.key].count += 1;
+      trendMap[bucket.key].quantity += (sale.lines || []).reduce(function (sum, line) { return sum + num(line.quantity); }, 0);
+    });
+    var trendPoints = Object.keys(trendMap).map(function (key) { return trendMap[key]; }).sort(function (a, b) { return a.stamp - b.stamp; });
+    function trendValue(point) {
+      return point ? num(point[trendMetric]) : 0;
+    }
+    function compactTrendValue(value) {
+      if (trendMetric === "total") return compactWon(value);
+      return Math.round(num(value)).toLocaleString("ko-KR") + (trendMetric === "count" ? "건" : "개");
+    }
+    function exactTrendValue(value) {
+      if (trendMetric === "total") return won(value);
+      return Math.round(num(value)).toLocaleString("ko-KR") + (trendMetric === "count" ? "건" : "개");
+    }
+    var chartWidth = 520;
+    var chartHeight = 230;
+    var chartLeft = 52;
+    var chartRight = 502;
+    var chartTop = 18;
+    var chartBottom = 186;
+    var chartMax = Math.max.apply(null, trendPoints.map(trendValue).concat([1]));
+    var chartCeiling = chartMax * 1.12;
+    var chartCoordinates = trendPoints.map(function (point, index) {
+      var x = trendPoints.length === 1 ? (chartLeft + chartRight) / 2 : chartLeft + index * (chartRight - chartLeft) / (trendPoints.length - 1);
+      var y = chartBottom - trendValue(point) / chartCeiling * (chartBottom - chartTop);
+      return { x: x, y: y, point: point };
+    });
+    var chartLine = chartCoordinates.map(function (coordinate) { return coordinate.x.toFixed(1) + "," + coordinate.y.toFixed(1); }).join(" ");
+    var chartArea = chartCoordinates.length ? "M " + chartCoordinates[0].x.toFixed(1) + " " + chartBottom + " L " + chartCoordinates.map(function (coordinate) { return coordinate.x.toFixed(1) + " " + coordinate.y.toFixed(1); }).join(" L ") + " L " + chartCoordinates[chartCoordinates.length - 1].x.toFixed(1) + " " + chartBottom + " Z" : "";
+    var chartLabelIndexes = [];
+    var chartLabelCount = Math.min(5, trendPoints.length);
+    for (var chartLabelIndex = 0; chartLabelIndex < chartLabelCount; chartLabelIndex += 1) {
+      var pointIndex = chartLabelCount === 1 ? 0 : Math.round(chartLabelIndex * (trendPoints.length - 1) / (chartLabelCount - 1));
+      if (chartLabelIndexes.indexOf(pointIndex) < 0) chartLabelIndexes.push(pointIndex);
+    }
+    React.useEffect(function () {
+      setSelectedTrendIndex(trendPoints.length ? trendPoints.length - 1 : null);
+    }, [historyPeriod, customRange.from, customRange.to, settlementVatFilter, trendMetric, trendPoints.length, trendPoints.length ? trendPoints[trendPoints.length - 1].key : ""]);
+    var safeTrendIndex = selectedTrendIndex == null ? trendPoints.length - 1 : Math.max(0, Math.min(trendPoints.length - 1, selectedTrendIndex));
+    var selectedTrend = trendPoints[safeTrendIndex];
+    var selectedCoordinate = chartCoordinates[safeTrendIndex];
+    var trendPrevious = safeTrendIndex > 0 ? trendPoints[safeTrendIndex - 1] : null;
+    var selectedTrendValue = trendValue(selectedTrend);
+    var previousTrendValue = trendValue(trendPrevious);
+    var trendChange = trendPrevious && previousTrendValue ? (selectedTrendValue - previousTrendValue) / previousTrendValue * 100 : null;
+    var tooltipWidth = 124;
+    var tooltipHeight = 43;
+    var tooltipX = selectedCoordinate ? Math.max(chartLeft, Math.min(chartRight - tooltipWidth, selectedCoordinate.x - tooltipWidth / 2)) : chartLeft;
+    var tooltipY = selectedCoordinate && selectedCoordinate.y < chartTop + 58 ? selectedCoordinate.y + 12 : (selectedCoordinate ? selectedCoordinate.y - tooltipHeight - 10 : chartTop);
+    function selectTrendPoint(event) {
+      if (!chartCoordinates.length) return;
+      var rect = event.currentTarget.getBoundingClientRect();
+      var svgX = (event.clientX - rect.left) / rect.width * chartWidth;
+      var index = chartCoordinates.length === 1 ? 0 : Math.round((svgX - chartLeft) / (chartRight - chartLeft) * (chartCoordinates.length - 1));
+      setSelectedTrendIndex(Math.max(0, Math.min(chartCoordinates.length - 1, index)));
+    }
+    function startTrendDrag(event) {
+      trendDraggingRef.current = true;
+      if (event.currentTarget.setPointerCapture) event.currentTarget.setPointerCapture(event.pointerId);
+      selectTrendPoint(event);
+    }
+    function moveTrendDrag(event) {
+      if (trendDraggingRef.current) selectTrendPoint(event);
+    }
+    function stopTrendDrag(event) {
+      trendDraggingRef.current = false;
+      if (event.currentTarget.releasePointerCapture && event.currentTarget.hasPointerCapture && event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    function renderHistorySale(sale) {
+      var lines = sale.lines || [];
+      var itemCount = lines.length;
+      var quantityCount = lines.reduce(function (sum, line) { return sum + num(line.quantity); }, 0);
+      var deductionValue = num((sale.deduction || {}).amount || (sale.totals || {}).deduction);
+      var storedDeduction = sale.deduction || {};
+      var deductionTaxIncluded = Object.prototype.hasOwnProperty.call(storedDeduction, "taxIncluded") ? !!storedDeduction.taxIncluded : !!(sale.totals || {}).deductionTaxIncluded;
+      var expanded = expandedHistorySaleId === sale.id;
+      var timeLabel = new Date(sale.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+      return h("article", { key: sale.id, className: expanded ? "history-card history-card-open" : "history-card" },
+        h("button", {
+          className: "history-card-summary",
+          type: "button",
+          "aria-expanded": expanded,
+          "aria-controls": "history-detail-" + sale.id,
+          onClick: function () { setExpandedHistorySaleId(expanded ? null : sale.id); }
+        },
+          h("span", { className: "history-summary-main" },
+            h("strong", null, sale.customerName || "-"),
+            h("small", null, timeLabel + " · " + (sale.writerName || "-"))
+          ),
+          h("span", { className: "history-summary-amount" },
+            h("strong", null, won((sale.totals || {}).total)),
+            h("small", null, quantityCount.toLocaleString("ko-KR") + "개")
+          )
+        ),
+        h("div", { className: "history-card-content", id: "history-detail-" + sale.id },
+          h("div", { className: "history-card-head" },
+            h("strong", { className: "history-customer" }, sale.customerName || "-"),
+            h("time", null, shortDate(sale.createdAt)),
+            h("strong", { className: "history-writer" }, sale.writerName || "-")
+          ),
+          h("div", { className: "history-meta" },
+            h("div", null, h("span", null, "날짜"), h("strong", null, timeLabel)),
+            h("div", null, h("span", null, "할인"), h("strong", null, "-" + won((sale.totals || {}).discount)))
+          ),
+          sale.customerNote ? h("p", { className: "history-note" }, sale.customerNote) : null,
+          h("div", { className: "history-stat" }, h("span", null, "품목/갯수"), h("strong", null, itemCount + "종 · " + quantityCount + "개")),
+          h("div", { className: "history-total" }, h("span", null, "총액"), h("strong", null, won((sale.totals || {}).total))),
+          deductionValue ? h("div", { className: "history-deduction" }, h("span", null, "차감"), h("strong", null, "-" + won(deductionValue) + " · 세금 " + (deductionTaxIncluded ? "포함" : "미포함"))) : null,
+          h("div", { className: deductionValue ? "history-mobile-detail has-deduction" : "history-mobile-detail" },
+            h("div", null, h("span", null, "작성자"), h("strong", null, sale.writerName || "-")),
+            h("div", null, h("span", null, "할인"), h("strong", null, "-" + won((sale.totals || {}).discount))),
+            h("div", null, h("span", null, "품목/수량"), h("strong", null, itemCount + "종 · " + quantityCount + "개")),
+            deductionValue ? h("div", null, h("span", null, "차감"), h("strong", null, "-" + won(deductionValue) + " · 세금 " + (deductionTaxIncluded ? "포함" : "미포함"))) : null
+          ),
+          h("div", { className: props.settlementAccess ? "history-actions history-actions-admin" : "history-actions history-actions-member" },
+            h("button", { onClick: function () { props.setPrintSale(sale); } }, "영수증 보기"),
+            h("button", { className: "history-edit", onClick: function () { props.beginSaleEdit(sale); } }, "수정"),
+            (sale.editHistory || []).length ? h("button", { className: "history-audit", onClick: function () { setAuditSale(sale); } }, "수정 기록 " + sale.editHistory.length) : null,
+            props.settlementAccess ? h("button", { className: "history-delete", onClick: function () { requestDeleteSale(sale); } }, "삭제") : null
+          )
+        )
+      );
+    }
+    function renderHistoryToggleGroup(group, extraClassName) {
+      var groupExpanded = expandedHistoryDateKey === group.key;
+      var sectionClass = "history-day-group" + (extraClassName ? " " + extraClassName : "") + (groupExpanded ? " history-day-open" : "");
+      return h("section", { className: sectionClass, key: group.key },
+        h("button", {
+          className: props.settlementAccess ? "history-day-head" : "history-day-head totals-hidden",
+          type: "button",
+          "aria-expanded": groupExpanded,
+          onClick: function () {
+            setExpandedHistoryDateKey(groupExpanded ? null : group.key);
+            setExpandedHistorySaleId(null);
+          }
+        },
+          h("div", null,
+            h("strong", null, group.label),
+            h("span", null, group.sales.length.toLocaleString("ko-KR") + "건")
+          ),
+          h("div", null,
+            h("span", null, group.quantity.toLocaleString("ko-KR") + "개"),
+            props.settlementAccess ? h("strong", null, won(group.total)) : null
+          )
+        ),
+        groupExpanded ? h("div", { className: "history-day-items" }, group.sales.map(renderHistorySale)) : null
+      );
+    }
+    function renderHistoryMonth(group) {
+      var monthExpanded = expandedHistoryMonthKey === group.key;
+      return h("section", { className: "history-month-group" + (monthExpanded ? " history-day-open" : ""), key: group.key },
+        h("button", {
+          className: props.settlementAccess ? "history-day-head history-month-head" : "history-day-head history-month-head totals-hidden",
+          type: "button",
+          "aria-expanded": monthExpanded,
+          onClick: function () {
+            setExpandedHistoryMonthKey(monthExpanded ? null : group.key);
+            setExpandedHistoryDateKey(null);
+            setExpandedHistorySaleId(null);
+          }
+        },
+          h("div", null,
+            h("strong", null, group.label),
+            h("span", null, group.sales.length.toLocaleString("ko-KR") + "건")
+          ),
+          h("div", null,
+            h("span", null, group.quantity.toLocaleString("ko-KR") + "개"),
+            props.settlementAccess ? h("strong", null, won(group.total)) : null
+          )
+        ),
+        monthExpanded ? h("div", { className: "history-month-weeks" }, group.weeks.map(function (week) {
+          return renderHistoryToggleGroup(week, "history-week-group");
+        })) : null
+      );
+    }
+    function renderHistoryContents() {
+      if (!filtered.length) return h("p", { className: "empty" }, "저장된 판매 내역이 없습니다.");
+      if (historyPeriod === "today") return h("div", { className: "history-day-items history-today-items" }, filtered.map(renderHistorySale));
+      if (historyPeriod === "month") return h("div", { className: "history-group-stack" }, monthHistoryGroups.map(function (group) {
+        return renderHistoryToggleGroup(group, "history-week-group");
+      }));
+      if (historyPeriod === "all") return h("div", { className: "history-group-stack" }, historyMonthGroups.map(renderHistoryMonth));
+      return h("div", { className: "history-group-stack" }, historyDayGroups.map(function (group) {
+        return renderHistoryToggleGroup(group, "history-date-group");
+      }));
+    }
     return h(React.Fragment, null, h("main", { className: "history-panel" },
-      h("div", { className: "history-toolbar" },
-        h("div", { className: "history-filter-bar" },
-          h("div", { className: "history-period-tabs" }, [["today", "오늘"], ["week", "주"], ["month", "월"]].map(function (entry) {
+      h("div", { className: "history-filter-bar" },
+          h("div", { className: "history-period-tabs" }, [["today", "오늘"], ["week", "주"], ["month", "월"], ["all", "전체"]].map(function (entry) {
             return h("button", { key: entry[0], className: historyPeriod === entry[0] ? "active" : "", onClick: function () { selectHistoryPeriod(entry[0]); } }, entry[1]);
           })),
           h("div", { className: "history-date-range" },
@@ -3043,7 +3820,8 @@
               h("strong", null, displayInputDate(customRange.from) + " ~ " + displayInputDate(customRange.to || customRange.from))
             )
           )
-        ),
+      ),
+      h("div", { className: "history-toolbar" },
         calendarOpen ? h("div", { className: "history-calendar" },
             h("div", { className: "history-calendar-head" },
               h("button", { onClick: function () { moveCalendarMonth(-1); } }, "‹"),
@@ -3075,62 +3853,123 @@
       showSettlement ? h("section", { className: "settlement-panel" },
         h("div", { className: "settlement-head" },
           h("strong", null, "정산표"),
-          h("div", { className: "period-tabs" }, [["day", "일별"], ["week", "주별"], ["month", "월별"], ["all", "전체"]].map(function (entry) {
-            return h("button", { key: entry[0], className: settlementPeriod === entry[0] ? "active" : "", onClick: function () { setSettlementPeriod(entry[0]); } }, entry[1]);
-          })),
-          h("div", { className: "period-tabs vat-tabs" }, [["all", "전체"], ["vat", "세금"], ["noVat", "세금X"], ["offshore", "해외"]].map(function (entry) {
+          h("span", { className: "settlement-range-label" }, settlementRangeLabel())
+        ),
+        h("div", { className: "period-tabs vat-tabs" }, [["all", "전체"], ["vat", "세금"], ["noVat", "세금X"], ["offshore", "해외"]].map(function (entry) {
             return h("button", { key: entry[0], className: settlementVatFilter === entry[0] ? "active" : "", onClick: function () { setSettlementVatFilter(entry[0]); } }, entry[1]);
-          }))
+        })),
+        h("section", { className: "settlement-primary-summary", "aria-label": "정산 총액 요약" },
+          h("div", { className: "settlement-primary-total" },
+            h("span", null, settlementRangeLabel()),
+            h("small", null, "총액"),
+            h("strong", null, won(grand.total))
+          ),
+          h("div", { className: "settlement-primary-meta" },
+            h("div", null, h("span", null, "건수"), h("strong", null, grand.count.toLocaleString("ko-KR") + "건")),
+            h("div", null, h("span", null, "수량"), h("strong", null, grand.quantity.toLocaleString("ko-KR") + "개"))
+          )
         ),
-        h("div", { className: "settlement-summary" },
-          h("div", null, h("span", null, "건수"), h("strong", null, grand.count + "건")),
-          h("div", null, h("span", null, "수량"), h("strong", null, grand.quantity + "개")),
-          h("div", null, h("span", null, "상품합계"), h("strong", null, won(grand.subtotal))),
-          h("div", null, h("span", null, "할인"), h("strong", null, "-" + won(grand.discount))),
-          h("div", null, h("span", null, "VAT"), h("strong", null, won(grand.vat))),
-          h("div", null, h("span", null, "총액"), h("strong", null, won(grand.total)))
+        h("section", { className: settlementMetricsOpen ? "settlement-metrics open" : "settlement-metrics" },
+          h("button", {
+            className: "settlement-metrics-toggle",
+            type: "button",
+            "aria-expanded": settlementMetricsOpen,
+            "aria-controls": "settlement-detail-metrics",
+            onClick: function () { setSettlementMetricsOpen(!settlementMetricsOpen); }
+          }, h("span", null, "상세 지표"), h("small", null, settlementMetricsOpen ? "접기" : "보기")),
+          settlementMetricsOpen ? h("div", { className: "settlement-detail-metrics", id: "settlement-detail-metrics" },
+            h("div", null, h("span", null, "상품합계"), h("strong", null, won(grand.subtotal))),
+            h("div", null, h("span", null, "할인"), h("strong", null, "-" + won(grand.discount))),
+            h("div", null, h("span", null, "차감"), h("strong", null, "-" + won(grand.deduction))),
+            h("div", null, h("span", null, "VAT"), h("strong", null, won(grand.vat))),
+            h("div", null, h("span", null, "평균 건당"), h("strong", null, won(averageSale))),
+            h("div", null, h("span", null, "할인율"), h("strong", null, discountRate.toFixed(1) + "%")),
+            h("div", null, h("span", null, "VAT 비중"), h("strong", null, vatRate.toFixed(1) + "%"))
+          ) : null
         ),
-        h("div", { className: "settlement-table" },
-          h("div", { className: "settlement-table-head" }, h("span", null, "기간"), h("span", null, "거래처"), h("span", null, "건수"), h("span", null, "수량"), h("span", null, "상품합계"), h("span", null, "할인"), h("span", null, "공급가"), h("span", null, "VAT"), h("span", null, "총액")),
+        rows.length ? h("div", { className: "settlement-insights" },
+          h("section", { className: "settlement-trend-card", "aria-label": "선택 기간 판매 추이" },
+            h("div", { className: "settlement-trend-head" },
+              h("div", null, h("strong", null, trendMetric === "total" ? "매출 추이" : trendMetric === "count" ? "판매 건수 추이" : "판매 수량 추이"), h("span", null, historyPeriod === "today" ? "시간대별" : historyPeriod === "all" ? "월별" : historyPeriod === "range" ? "선택 범위" : "날짜별")),
+              selectedTrend ? h("div", { className: "settlement-trend-latest" },
+                h("span", null, selectedTrend.label),
+                h("strong", null, compactTrendValue(selectedTrendValue)),
+                trendChange == null ? null : h("b", { className: trendChange >= 0 ? "up" : "down" }, (trendChange >= 0 ? "+" : "") + trendChange.toFixed(1) + "%")
+              ) : null
+            ),
+            h("div", { className: "trend-metric-tabs", role: "group", "aria-label": "그래프 항목 선택" }, [["total", "총액"], ["count", "건수"], ["quantity", "수량"]].map(function (entry) {
+              return h("button", { key: entry[0], className: trendMetric === entry[0] ? "active" : "", onClick: function () { setTrendMetric(entry[0]); } }, entry[1]);
+            })),
+            h("svg", {
+              className: "settlement-trend-chart",
+              viewBox: "0 0 " + chartWidth + " " + chartHeight,
+              role: "img",
+              "aria-label": "기간별 " + (trendMetric === "total" ? "총액" : trendMetric === "count" ? "건수" : "수량") + " 선 그래프",
+              onPointerDown: startTrendDrag,
+              onPointerMove: moveTrendDrag,
+              onPointerUp: stopTrendDrag,
+              onPointerCancel: stopTrendDrag
+            },
+              [0, 1 / 3, 2 / 3, 1].map(function (ratio) {
+                var y = chartBottom - ratio * (chartBottom - chartTop);
+                return h("g", { key: "grid-" + ratio },
+                  h("line", { className: "trend-grid-line", x1: chartLeft, y1: y, x2: chartRight, y2: y }),
+                  h("text", { className: "trend-axis-label", x: chartLeft - 8, y: y + 4, textAnchor: "end" }, compactTrendValue(chartCeiling * ratio))
+                );
+              }),
+              chartArea ? h("path", { className: "trend-area", d: chartArea }) : null,
+              chartLine ? h("polyline", { className: "trend-line", points: chartLine }) : null,
+              chartCoordinates.length <= 20 ? chartCoordinates.map(function (coordinate) {
+                return h("circle", { className: "trend-point", key: coordinate.point.key, cx: coordinate.x, cy: coordinate.y, r: 3.5 });
+              }) : null,
+              chartCoordinates.length ? h("circle", { className: "trend-point-latest", cx: chartCoordinates[chartCoordinates.length - 1].x, cy: chartCoordinates[chartCoordinates.length - 1].y, r: 5 }) : null,
+              selectedCoordinate ? h("g", { className: "trend-selection" },
+                h("line", { className: "trend-cursor-line", x1: selectedCoordinate.x, y1: chartTop, x2: selectedCoordinate.x, y2: chartBottom }),
+                h("circle", { className: "trend-selected-point", cx: selectedCoordinate.x, cy: selectedCoordinate.y, r: 6 }),
+                h("rect", { className: "trend-tooltip", x: tooltipX, y: tooltipY, width: tooltipWidth, height: tooltipHeight, rx: 6 }),
+                h("text", { className: "trend-tooltip-date", x: tooltipX + tooltipWidth / 2, y: tooltipY + 15, textAnchor: "middle" }, selectedTrend.label),
+                h("text", { className: "trend-tooltip-value", x: tooltipX + tooltipWidth / 2, y: tooltipY + 33, textAnchor: "middle" }, exactTrendValue(selectedTrendValue))
+              ) : null,
+              chartLabelIndexes.map(function (index) {
+                return h("text", { className: "trend-x-label", key: "label-" + trendPoints[index].key, x: chartCoordinates[index].x, y: chartBottom + 25, textAnchor: index === 0 ? "start" : index === trendPoints.length - 1 ? "end" : "middle" }, trendPoints[index].label);
+              })
+            )
+          )
+        ) : null,
+        h("div", { className: "settlement-cards" },
           rows.length ? rows.map(function (row) {
-            return h("div", { className: "settlement-row", key: row.period + row.customerName },
-              h("span", null, row.period),
-              h("strong", null, row.customerName),
-              h("span", null, row.count + "건"),
-              h("span", null, row.quantity + "개"),
-              h("span", null, won(row.subtotal)),
-              h("span", null, "-" + won(row.discount)),
-              h("span", null, won(row.supply)),
-              h("span", null, won(row.vat)),
-              h("b", null, won(row.total))
+            var hasOffshore = row.offshoreJapanAmount || row.offshoreCommission || row.offshoreReceivable || row.offshoreVat;
+            return h("details", { className: "settlement-row-card", key: row.customerName },
+              h("summary", null,
+                h("div", { className: "settlement-card-customer" },
+                  h("strong", { title: row.customerName }, row.customerName),
+                  h("span", null, row.period)
+                ),
+                h("div", { className: "settlement-card-quick" },
+                  h("span", null, row.count + "건"),
+                  h("span", null, row.quantity + "개"),
+                  h("strong", null, won(row.total))
+                )
+              ),
+              h("div", { className: "settlement-card-detail" },
+                h("div", null, h("span", null, "상품합계"), h("strong", null, won(row.subtotal))),
+                h("div", null, h("span", null, "할인"), h("strong", null, "-" + won(row.discount))),
+                h("div", null, h("span", null, "차감"), h("strong", null, "-" + won(row.deduction))),
+                h("div", null, h("span", null, "공급가"), h("strong", null, won(row.supply))),
+                h("div", null, h("span", null, "VAT"), h("strong", null, won(row.vat))),
+                h("div", { className: "settlement-card-total" }, h("span", null, "총액"), h("strong", null, won(row.total))),
+                hasOffshore ? h("div", { className: "settlement-offshore-detail" },
+                  h("strong", null, "해외 정산"),
+                  h("span", null, "일본 금액 " + won(row.offshoreJapanAmount)),
+                  h("span", null, "수수료 " + won(row.offshoreCommission)),
+                  h("span", null, "받을 금액 " + won(row.offshoreReceivable)),
+                  h("span", null, "해외 VAT " + won(row.offshoreVat))
+                ) : null
+              )
             );
           }) : h("p", { className: "empty" }, "정산할 내역이 없습니다.")
         )
-      ) : h("div", { className: "history-list" }, filtered.length ? filtered.map(function (sale) {
-        var lines = sale.lines || [];
-        var itemCount = lines.length;
-        var quantityCount = lines.reduce(function (sum, line) { return sum + num(line.quantity); }, 0);
-        return h("article", { key: sale.id, className: "history-card printable", role: "button", tabIndex: 0, onClick: function () { props.setPrintSale(sale); }, onKeyDown: function (event) { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.setPrintSale(sale); } } },
-          h("div", { className: "history-card-head" },
-            h("strong", { className: "history-customer" }, sale.customerName || "-"),
-            h("time", null, shortDate(sale.createdAt)),
-            h("strong", { className: "history-writer" }, sale.writerName || "-")
-          ),
-          h("div", { className: "history-meta" },
-            h("div", null, h("span", null, "날짜"), h("strong", null, new Date(sale.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }))),
-            h("div", null, h("span", null, "할인"), h("strong", null, "-" + won((sale.totals || {}).discount)))
-          ),
-          sale.customerNote ? h("p", { className: "history-note" }, sale.customerNote) : null,
-          h("div", { className: "history-stat" }, h("span", null, "품목/갯수"), h("strong", null, itemCount + "종 · " + quantityCount + "개")),
-          h("div", { className: "history-total" }, h("span", null, "총액"), h("strong", null, won(sale.totals.total))),
-          h("div", { className: props.settlementAccess ? "history-actions history-actions-admin" : "history-actions history-actions-member" },
-            h("button", { onClick: function (event) { event.stopPropagation(); props.setPrintSale(sale); } }, "재출력"),
-            h("button", { className: "history-edit", onClick: function (event) { event.stopPropagation(); props.beginSaleEdit(sale); } }, "수정"),
-            (sale.editHistory || []).length ? h("button", { className: "history-audit", onClick: function (event) { event.stopPropagation(); setAuditSale(sale); } }, "수정 기록 " + sale.editHistory.length) : null,
-            props.settlementAccess ? h("button", { className: "history-delete", onClick: function (event) { event.stopPropagation(); requestDeleteSale(sale); } }, "삭제") : null
-          )
-        );
-      }) : h("p", { className: "empty" }, "저장된 판매 내역이 없습니다."))
+      ) : h("div", { className: "history-list" }, renderHistoryContents())
     ),
       deleteTarget ? h("div", { className: "history-modal", role: "dialog", "aria-modal": true },
         h("button", { className: "history-modal-backdrop", "aria-label": "닫기", onClick: function () { setDeleteTarget(null); } }),
@@ -3205,7 +4044,10 @@
   }
 
   function PrintSheet(props) {
-    var pages = receiptPages(props.sale);
+    var saleList = Array.isArray(props.sale) ? props.sale : [props.sale];
+    var pages = saleList.reduce(function (allPages, sale) {
+      return allPages.concat(receiptPages(sale).map(function (page) { return Object.assign({}, page, { sale: sale }); }));
+    }, []);
     var previewWidthHook = React.useState(window.innerWidth);
     var previewWidth = previewWidthHook[0], setPreviewWidth = previewWidthHook[1];
     React.useEffect(function () {
@@ -3221,10 +4063,14 @@
     function printReceipt() {
       if (window.PorsPrint && typeof window.PorsPrint.print === "function") {
         document.body.classList.add("native-printing");
-        window.PorsPrint.print();
-        setTimeout(function () {
-          document.body.classList.remove("native-printing");
-        }, 3000);
+        window.requestAnimationFrame(function () {
+          window.requestAnimationFrame(function () {
+            window.PorsPrint.print();
+            setTimeout(function () {
+              document.body.classList.remove("native-printing");
+            }, 3000);
+          });
+        });
         return;
       }
       window.print();
@@ -3233,7 +4079,7 @@
       h("div", { className: "receipt-preview-toolbar" },
         h("div", { className: "receipt-preview-heading" },
           h("strong", null, "영수증 미리보기"),
-          h("span", { className: "receipt-preview-count" }, "총 " + pages.length + "페이지")
+          h("span", { className: "receipt-preview-count" }, (saleList.length > 1 ? saleList.length + "건 · " : "") + "총 " + pages.length + "페이지")
         ),
         h("div", null,
           h("button", { className: "ghost", onClick: props.onClose }, "닫기"),
@@ -3241,15 +4087,26 @@
         )
       ),
       pages.map(function (page) {
-        return h("div", { className: "receipt-preview-page", key: page.pageIndex }, [0, 1].map(function (index) {
-          return h(Receipt, { key: index, sale: props.sale, store: props.store, copyLabel: index === 0 ? "보관용" : "고객용", pageLines: page.lines, lineStart: page.lineStart, pageIndex: page.pageIndex, pageCount: pages.length, isLastPage: page.isLastPage });
+        return h("div", { className: "receipt-preview-page", key: page.sale.id + "-" + page.pageIndex }, [0, 1].map(function (index) {
+          return h(Receipt, { key: index, sale: page.sale, store: props.store, copyLabel: index === 0 ? "보관용" : "고객용", pageLines: page.lines, lineStart: page.lineStart, pageIndex: page.pageIndex, pageCount: page.pageCount, isLastPage: page.isLastPage });
         }));
       })
     );
   }
 
   function receiptPages(sale) {
-    var lines = Array.isArray(sale.lines) ? sale.lines : [];
+    var lines = Array.isArray(sale.lines) ? sale.lines.slice() : [];
+    var totalsValue = sale.totals || {};
+    var deductionAmount = num((sale.deduction || {}).amount || totalsValue.deduction);
+    var deductionTaxIncluded = Object.prototype.hasOwnProperty.call(sale.deduction || {}, "taxIncluded") ? !!sale.deduction.taxIncluded : !!totalsValue.deductionTaxIncluded;
+    if (deductionAmount) {
+      lines.push({
+        id: "receipt_deduction_" + sale.id,
+        receiptDeduction: true,
+        name: "차감 (VAT " + (deductionTaxIncluded ? "포함" : "미포함") + ")",
+        amount: deductionAmount
+      });
+    }
     var pageLimit = 20;
     var chunks = [];
     if (!lines.length) chunks.push({ start: 0, lines: [] });
@@ -3259,7 +4116,7 @@
       }
     }
     return chunks.map(function (chunk, index) {
-      return { lines: chunk.lines, lineStart: chunk.start, pageIndex: index + 1, isLastPage: index === chunks.length - 1 };
+      return { lines: chunk.lines, lineStart: chunk.start, pageIndex: index + 1, pageCount: chunks.length, isLastPage: index === chunks.length - 1 };
     });
   }
 
@@ -3284,6 +4141,8 @@
         itemSupply: offshore.supply,
         supply: offshore.supply + shippingFee,
         vat: offshore.vat,
+        deduction: totalsValue.deduction,
+        deductionTaxIncluded: totalsValue.deductionTaxIncluded,
         total: offshore.receivable + shippingFee
       };
     }
@@ -3294,6 +4153,8 @@
       itemSupply: Math.max(0, num(totalsValue.total) - shippingFee),
       supply: totalsValue.total,
       vat: 0,
+      deduction: totalsValue.deduction,
+      deductionTaxIncluded: totalsValue.deductionTaxIncluded,
       total: totalsValue.total
     };
   }
@@ -3301,13 +4162,15 @@
   function Receipt(props) {
     var sale = props.sale;
     var receiptTotals = receiptTotalsForCopy(sale, props.copyLabel);
-    var printedCustomerName = safeText(sale.customerName || "").replace(/\s*[\(（][^\)）]*[\)）]/g, "").trim();
+    var printedCustomerName = safeText(sale.customerName || "");
     var issuedAt = new Date(sale.createdAt).toLocaleString("ko-KR");
     var writerName = sale.writerName || "";
+    var groupPurchaseLabel = sale.groupPurchaseId ? "공동구매 " + (sale.groupPurchaseIndex || 1) + "/" + (sale.groupPurchaseCount || 1) + (sale.groupPurchaseRate ? " · " + Math.round(sale.groupPurchaseRate * 100) + "% 적용" : " · 공동구매 제외") : "";
     var pageIndex = props.pageIndex || 1;
     var pageCount = props.pageCount || 1;
     var pageLines = props.pageLines || sale.lines || [];
     var lineOffset = num(props.lineStart || 0);
+    var totalQuantity = (sale.lines || []).reduce(function (sum, line) { return sum + num(line.quantity); }, 0);
     var firstPage = pageIndex === 1;
     var customerCopy = props.copyLabel === "고객용";
     return h("section", { className: "receipt" },
@@ -3316,8 +4179,10 @@
       h("div", { className: customerCopy ? "receipt-customer-line receipt-customer-line-public" : "receipt-customer-line" },
         h("span", null, issuedAt),
         h("span", { className: "receipt-customer-meta" },
+          h("b", { className: "receipt-top-total" }, "총금액: " + won(receiptTotals.total)),
           h("strong", { className: "receipt-customer-name" }, "거래처: " + printedCustomerName),
-          writerName ? h("small", { className: "receipt-writer-name" }, "작성: " + writerName) : null
+          !customerCopy && writerName ? h("small", { className: "receipt-writer-name" }, "작성: " + writerName) : null,
+          groupPurchaseLabel ? h("small", { className: "receipt-writer-name" }, groupPurchaseLabel) : null
         )
       ),
       firstPage ? h("div", { className: "receipt-shop" },
@@ -3336,21 +4201,23 @@
       h("table", null,
         h("thead", null, h("tr", null, h("th", null, "번호"), h("th", null, "품목"), h("th", null, "수량"), h("th", null, "단가"), h("th", null, "금액"))),
         h("tbody", null, pageLines.map(function (line, index) {
-          return h("tr", { key: line.id },
-            h("td", null, lineOffset + index + 1),
+          return h("tr", { key: line.id, className: line.receiptDeduction ? "receipt-deduction-line" : "" },
+            h("td", null, line.receiptDeduction ? "" : lineOffset + index + 1),
             h("td", null, line.name),
-            h("td", null, line.quantity),
-            h("td", null, won(line.price)),
-            h("td", null, won(line.price * line.quantity))
+            h("td", null, line.receiptDeduction ? "" : line.quantity),
+            h("td", null, line.receiptDeduction ? "" : won(line.price)),
+            h("td", null, line.receiptDeduction ? "-" + won(line.amount) : won(line.price * line.quantity))
           );
         }))
       ),
       props.isLastPage && props.copyLabel === "보관용" ? h("div", { className: "receipt-tax-summary receipt-tax-summary-keeper" + (num(receiptTotals.shippingFee) ? " has-shipping" : "") },
+        h("div", null, h("span", null, "총수"), h("strong", null, totalQuantity + "개")),
         h("div", null, h("span", null, "할인된 원가금액"), h("strong", null, won(receiptTotals.itemSupply == null ? receiptTotals.supply : receiptTotals.itemSupply))),
         num(receiptTotals.shippingFee) ? h("div", null, h("span", null, "배송비"), h("strong", null, won(receiptTotals.shippingFee))) : null,
         h("div", null, h("span", null, "세금"), h("strong", null, won(receiptTotals.vat))),
         h("div", null, h("span", null, "총금액"), h("strong", null, won(receiptTotals.total)))
       ) : props.isLastPage ? h("div", { className: "receipt-tax-summary" + (num(receiptTotals.shippingFee) ? " has-shipping" : "") },
+        h("div", null, h("span", null, "총수"), h("strong", null, totalQuantity + "개")),
         h("div", null, h("span", null, "토탈 원가"), h("strong", null, won(receiptTotals.subtotal))),
         h("div", null, h("span", null, "공급가"), h("strong", null, won(receiptTotals.itemSupply == null ? receiptTotals.supply : receiptTotals.itemSupply))),
         num(receiptTotals.shippingFee) ? h("div", null, h("span", null, "배송비"), h("strong", null, won(receiptTotals.shippingFee))) : null,
