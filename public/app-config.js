@@ -12,3 +12,4 @@ window.PIERCE_FIREBASE_CONFIG = {
 };
 window.PIERCE_FIREBASE_COLLECTION = "piercing_pos";
 window.PIERCE_FIREBASE_DOC = "pors_state";
+window.PORS_NOBLESSE_API_BASE_URL = "https://noblesse.web.app/api";

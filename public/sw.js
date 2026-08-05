@@ -1,4 +1,4 @@
-const CACHE_NAME = "piercing-pos-v17";
+const CACHE_NAME = "piercing-pos-v18";
 const ASSETS = [
   "./",
   "./index.html",

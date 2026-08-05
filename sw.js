@@ -1,10 +1,11 @@
-const CACHE_NAME = "piercing-pos-v11";
+const CACHE_NAME = "piercing-pos-v12";
 const ASSETS = [
   "./",
   "./index.html",
   "./app-config.js",
   "./manifest.webmanifest",
   "./standalone.js",
+  "./online-quotes.js",
   "./vendor/react.production.min.js",
   "./vendor/react-dom.production.min.js",
   "./icons/icon-192.png",
