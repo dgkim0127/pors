@@ -231,6 +231,14 @@
     return global.PIERCE_FIREBASE_CONFIG || {};
   }
 
+  function quoteReadToken() {
+    var configured = String(global.PORS_NOBLESSE_READ_TOKEN || "").trim();
+    if (!configured) {
+      throw new Error("웹 견적 읽기 설정이 필요합니다.");
+    }
+    return configured;
+  }
+
   function getNamedAuth() {
     if (!global.firebase || !global.firebase.auth) {
       throw new Error("Firebase Auth를 불러오지 못했습니다.");
@@ -249,7 +257,32 @@
     return app.auth();
   }
 
-  async function request(path, options) {
+  async function readRequest(path) {
+    var response = await global.fetch(apiBase() + path, {
+      method: "GET",
+      headers: {
+        "X-Pors-Quote-Read-Token": quoteReadToken(),
+        "Content-Type": "application/json",
+      },
+    });
+    var payload = null;
+    try {
+      payload = await response.json();
+    } catch (_error) {
+      payload = {};
+    }
+    if (!response.ok) {
+      var error = new Error(
+        payload.error || payload.message || "웹 견적을 불러오지 못했습니다."
+      );
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
+  }
+
+  async function adminRequest(path, options) {
     var auth = getNamedAuth();
     var user = auth.currentUser;
     if (!user) throw new Error("온라인 견적 관리자 로그인이 필요합니다.");
@@ -476,7 +509,7 @@
     var draft = props.draft;
     var image = resolveItemImage(item);
     var cancelled = requested - clampQuantity(draft.preparedQuantity, requested);
-    var canWrite = props.online && !props.finalized;
+    var canWrite = props.online && props.canWrite && !props.finalized;
     return h(
       "article",
       { className: "online-quote-item" },
@@ -611,7 +644,7 @@
             "select",
             {
               value: selectedId,
-              disabled: !props.online || props.busy,
+              disabled: !props.online || !props.canWrite || props.busy,
               onChange: function (event) { setSelectedId(event.target.value); },
             },
             h("option", { value: "" }, "영수증 선택"),
@@ -629,7 +662,7 @@
           "button",
           {
             type: "button",
-            disabled: !props.online || props.busy || !selectedSale || Boolean(props.linkedReceiptId),
+            disabled: !props.online || !props.canWrite || props.busy || !selectedSale || Boolean(props.linkedReceiptId),
             onClick: function () {
               if (global.confirm("선택한 기존 PORS 영수증을 이 웹 견적에 연결할까요?")) {
                 props.onLink(selectedSale);
@@ -676,21 +709,30 @@
           h("h2", null, quote.quoteNumber || quote.inquiryNumber || "온라인 견적"),
           h("p", null, webBuyerLabel(quote))
         ),
-        h(
-          "button",
-          {
-            type: "button",
-            onClick: function () {
-              props.auth.signOut();
-            },
-          },
-          "로그아웃"
-        )
+        props.canWrite
+          ? h(
+              "button",
+              {
+                type: "button",
+                onClick: function () {
+                  props.auth.signOut();
+                },
+              },
+              "로그아웃"
+            )
+          : h(
+              "button",
+              { type: "button", onClick: props.onLogin },
+              "작업 로그인"
+            )
       ),
       !props.online
         ? h("p", { className: "online-quotes-offline" }, "오프라인: 저장·가격 계산·확정은 사용할 수 없습니다.")
         : null,
       props.error ? h("p", { className: "online-quotes-error" }, props.error) : null,
+      !props.canWrite
+        ? h("p", { className: "online-quotes-offline" }, "로그인 없이 조회 중입니다. 준비·확정·공개 작업은 작업 로그인이 필요합니다.")
+        : null,
       h(
         "div",
         { className: "online-quote-detail__items" },
@@ -703,6 +745,7 @@
               cancellationReason: "",
             },
             online: props.online,
+            canWrite: props.canWrite,
             finalized: finalized,
             onChange: function (fieldName, value) {
               props.onItemChange(item.id, fieldName, value);
@@ -721,7 +764,7 @@
           "button",
           {
             type: "button",
-            disabled: !props.online || props.busy || finalized || !features().picking,
+            disabled: !props.online || !props.canWrite || props.busy || finalized || !features().picking,
             onClick: props.onSavePicking,
           },
           "임시 저장"
@@ -730,7 +773,7 @@
           "button",
           {
             type: "button",
-            disabled: !props.online || props.busy || finalized || !features().pricing,
+            disabled: !props.online || !props.canWrite || props.busy || finalized || !features().pricing,
             onClick: props.onPreview,
           },
           "가격 다시 계산"
@@ -740,7 +783,7 @@
           {
             type: "button",
             className: "online-quotes-primary",
-            disabled: !props.online || props.busy || finalized || !features().finalize,
+            disabled: !props.online || !props.canWrite || props.busy || finalized || !features().finalize,
             onClick: props.onFinalize,
           },
           finalized ? "견적 확정됨" : "견적 확정"
@@ -750,7 +793,7 @@
           {
             type: "button",
             className: "online-quotes-primary",
-            disabled: !props.online || props.busy || !finalized || published || !features().publish,
+            disabled: !props.online || !props.canWrite || props.busy || !finalized || published || !features().publish,
             onClick: props.onPublish,
           },
           published ? "고객 공개됨" : "고객에게 견적 공개"
@@ -758,6 +801,7 @@
       ),
       h(ReceiptLinker, {
         online: props.online,
+        canWrite: props.canWrite,
         busy: props.busy,
         published: published,
         linkedReceiptId: detail.pos && detail.pos.state && detail.pos.state.linkedReceiptId,
@@ -784,9 +828,12 @@
     var authHook = React.useState(null);
     var auth = authHook[0];
     var setAuth = authHook[1];
-    var userHook = React.useState(undefined);
+    var userHook = React.useState(null);
     var user = userHook[0];
     var setUser = userHook[1];
+    var loginHook = React.useState(false);
+    var showLogin = loginHook[0];
+    var setShowLogin = loginHook[1];
     var listHook = React.useState(readCache(CACHE_LIST_KEY, []));
     var quotes = listHook[0];
     var setQuotes = listHook[1];
@@ -812,8 +859,8 @@
       try {
         nextAuth = getNamedAuth();
         setAuth(nextAuth);
-      } catch (authError) {
-        setError(authError.message);
+      } catch {
+        setAuth(null);
         setUser(null);
         return undefined;
       }
@@ -824,9 +871,16 @@
 
     React.useEffect(
       function () {
-        if (user && features().read) loadQuotes();
+        if (features().read) loadQuotes();
       },
-      [user, online]
+      [online]
+    );
+
+    React.useEffect(
+      function () {
+        if (user) setShowLogin(false);
+      },
+      [user]
     );
 
     async function loadQuotes() {
@@ -837,7 +891,7 @@
       setBusy(true);
       setError("");
       try {
-        var response = await request("/admin/pos/quotes");
+        var response = await readRequest("/pors/quotes");
         var rows = response.quotes || response.items || [];
         setQuotes(rows);
         writeCache(CACHE_LIST_KEY, rows);
@@ -853,7 +907,7 @@
       setError("");
       try {
         var response = online
-          ? await request("/admin/pos/quotes/" + encodeURIComponent(quoteId))
+          ? await readRequest("/pors/quotes/" + encodeURIComponent(quoteId))
           : readCache(CACHE_DETAIL_PREFIX + quoteId, null);
         if (!response) throw new Error("오프라인에 저장된 상세 견적이 없습니다.");
         setDetail(response);
@@ -916,7 +970,7 @@
       setError("");
       try {
         var quote = detail.quote || detail;
-        var response = await request(
+        var response = await adminRequest(
           "/admin/pos/quotes/" + encodeURIComponent(quote.id) + path,
           {
             method: action === "picking" ? "PUT" : "POST",
@@ -942,7 +996,7 @@
       setError("");
       try {
         var quote = detail.quote || detail;
-        var response = await request(
+        var response = await adminRequest(
           "/admin/pos/quotes/" + encodeURIComponent(quote.id) + "/receipt-link",
           {
             method: "POST",
@@ -963,17 +1017,15 @@
     }
 
     if (!React || !h) return null;
-    if (user === undefined) {
-      return h("div", { className: "online-quotes-loading" }, "온라인 견적을 준비하고 있습니다.");
-    }
-    if (!user) {
+    if (showLogin && !user) {
       return auth
         ? h(OnlineQuoteLogin, { auth: auth })
-        : h("p", { className: "online-quotes-error" }, error);
+        : h("p", { className: "online-quotes-error" }, "작업 로그인을 사용할 수 없습니다.");
     }
     if (detail && draft) {
       return h(QuoteDetail, {
         auth: auth,
+        canWrite: Boolean(user),
         detail: detail,
         draft: draft,
         pricing: pricing || {},
@@ -985,6 +1037,9 @@
           setDetail(null);
           setDraft(null);
           setError("");
+        },
+        onLogin: function () {
+          setShowLogin(true);
         },
         onItemChange: updateItem,
         onSavePicking: function () {
