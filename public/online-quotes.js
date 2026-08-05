@@ -101,6 +101,32 @@
     return "웹-" + (name || "웹 거래처");
   }
 
+  function requestedQuantityFromDetail(detail) {
+    var items = detail && Array.isArray(detail.items)
+      ? detail.items
+      : detail && detail.quote && Array.isArray(detail.quote.items)
+        ? detail.quote.items
+        : null;
+    if (!items) return null;
+    return items.reduce(function (sum, item) {
+      var quantity = Number(item.requestedQuantity || item.quantity || 0);
+      return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+    }, 0);
+  }
+
+  function quoteListQuantity(quote) {
+    if (quote && quote.requestedQuantity != null) {
+      var requestedQuantity = Number(quote.requestedQuantity);
+      if (Number.isFinite(requestedQuantity) && requestedQuantity >= 0) {
+        return requestedQuantity;
+      }
+    }
+    var detailQuantity = requestedQuantityFromDetail(quote);
+    if (detailQuantity != null) return detailQuantity;
+    var itemCount = Number(quote && quote.itemCount);
+    return Number.isFinite(itemCount) && itemCount >= 0 ? itemCount : 0;
+  }
+
   function resolveItemImage(item) {
     var imageSet = (item && item.imageSet) || {};
     var gallery =
@@ -442,8 +468,15 @@
           { className: "online-quotes-heading__actions" },
           h(
             "button",
-            { type: "button", onClick: props.onReload, disabled: props.busy },
-            "새로고침"
+            {
+              type: "button",
+              className: "online-quotes-refresh",
+              onClick: props.onReload,
+              disabled: props.busy,
+              title: "새로고침",
+              "aria-label": "새로고침",
+            },
+            h("span", { "aria-hidden": "true" }, "↻")
           )
         )
       ),
@@ -468,12 +501,10 @@
                   },
                 },
                 h("span", { className: "online-quote-list-row__main" },
-                  h("strong", null, webBuyerLabel(quote)),
-                  h("small", null, quote.inquiryNumber || quote.quoteNumber || quote.id)
+                  h("strong", null, webBuyerLabel(quote))
                 ),
-                h("span", null, Number(quote.itemCount || (quote.items || []).length || 0) + "품목"),
-                h("span", null, pricing ? formatMoney(pricing.totalAmount) : formatMoney(quote.confirmedTotal || quote.requestedTotal)),
-                h("span", { className: "online-quote-status" }, statusLabel(quote))
+                h("span", { className: "online-quote-list-row__quantity" }, quoteListQuantity(quote) + "개"),
+                h("span", { className: "online-quote-list-row__price" }, pricing ? formatMoney(pricing.totalAmount) : formatMoney(quote.confirmedTotal || quote.requestedTotal))
               );
             })
           )
@@ -893,8 +924,27 @@
       try {
         var response = await readRequest("/pors/quotes");
         var rows = response.quotes || response.items || [];
-        setQuotes(rows);
-        writeCache(CACHE_LIST_KEY, rows);
+        var enrichedRows = await Promise.all(
+          rows.map(async function (quote) {
+            var detail = readCache(CACHE_DETAIL_PREFIX + quote.id, null);
+            if (!detail) {
+              try {
+                detail = await readRequest(
+                  "/pors/quotes/" + encodeURIComponent(quote.id)
+                );
+                writeCache(CACHE_DETAIL_PREFIX + quote.id, detail);
+              } catch (_detailError) {
+                return quote;
+              }
+            }
+            var requestedQuantity = requestedQuantityFromDetail(detail);
+            return requestedQuantity == null
+              ? quote
+              : Object.assign({}, quote, { requestedQuantity: requestedQuantity });
+          })
+        );
+        setQuotes(enrichedRows);
+        writeCache(CACHE_LIST_KEY, enrichedRows);
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -1080,6 +1130,8 @@
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,
       resolveItemImage: resolveItemImage,
+      requestedQuantityFromDetail: requestedQuantityFromDetail,
+      quoteListQuantity: quoteListQuantity,
       webBuyerLabel: webBuyerLabel,
     },
   };

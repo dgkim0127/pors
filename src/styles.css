@@ -4765,6 +4765,42 @@ body.native-printing .receipt-preview-page .receipt {
   gap: 8px;
 }
 
+.online-quotes-heading > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.online-quotes-heading__actions {
+  flex: 0 0 auto;
+}
+
+.online-quotes-refresh {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0;
+  background: #fff;
+  color: var(--ink);
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.online-quotes-refresh:hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.online-quotes-refresh:disabled {
+  opacity: 0.45;
+}
+
 .online-quotes-offline {
   margin-bottom: 12px;
   padding: 11px 14px;
@@ -4784,7 +4820,7 @@ body.native-printing .receipt-preview-page .receipt {
 .online-quote-list-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 18px;
   width: 100%;
@@ -4824,6 +4860,16 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-list-row b {
   white-space: nowrap;
+}
+
+.online-quote-list-row__quantity,
+.online-quote-list-row__price {
+  white-space: nowrap;
+  font-weight: 900;
+}
+
+.online-quote-list-row__price {
+  color: var(--accent-strong);
 }
 
 .online-quote-status {
@@ -5180,6 +5226,12 @@ body.native-printing .receipt-preview-page .receipt {
     padding: 14px;
   }
 
+  .online-quotes-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
   .online-quotes-heading__actions,
   .online-quote-detail__header > div:last-child {
     justify-content: stretch;
@@ -5190,11 +5242,27 @@ body.native-printing .receipt-preview-page .receipt {
     flex: 1 1 120px;
   }
 
+  .online-quotes-heading__actions .online-quotes-refresh {
+    flex: 0 0 40px;
+  }
+
   .online-quote-list-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 12px;
     min-height: 88px;
     padding: 12px;
+  }
+
+  .online-quote-list-row__main {
+    grid-column: 1 / -1;
+  }
+
+  .online-quote-list-row__quantity {
+    grid-column: 1;
+  }
+
+  .online-quote-list-row__price {
+    grid-column: 2;
   }
 
   .online-quote-list-row > small {

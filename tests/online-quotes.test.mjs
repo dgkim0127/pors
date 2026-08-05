@@ -51,6 +51,8 @@ const {
   draftFromQuote,
   groupPriceBands,
   optionPairs,
+  quoteListQuantity,
+  requestedQuantityFromDetail,
   resolveItemImage,
   webBuyerLabel,
 } = windowObject.PorsOnlineQuotes.core;
@@ -113,6 +115,24 @@ assert.throws(() => buildReceiptLinkPayload(detail, null));
 
 assert.equal(webBuyerLabel({ companyName: "Sample shop" }), "웹-Sample shop");
 assert.equal(webBuyerLabel({}), "웹-웹 거래처");
+assert.equal(
+  requestedQuantityFromDetail({
+    items: [
+      { requestedQuantity: 3 },
+      { quantity: 2 },
+      { requestedQuantity: 0 },
+    ],
+  }),
+  5,
+);
+assert.equal(requestedQuantityFromDetail({}), null);
+assert.equal(quoteListQuantity({ requestedQuantity: 7, itemCount: 2 }), 7);
+assert.equal(quoteListQuantity({ items: [{ requestedQuantity: 4 }] }), 4);
+assert.equal(quoteListQuantity({ itemCount: 3 }), 3);
+assert.match(source, /className: "online-quotes-refresh"/);
+assert.match(source, /"aria-label": "새로고침"/);
+assert.doesNotMatch(source, /h\("small", null, quote\.inquiryNumber/);
+assert.doesNotMatch(source, /className: "online-quote-status" }, statusLabel\(quote\)/);
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(optionPairs({ selectedOptions: [{ groupLabel: "color", valueLabel: "gold" }, { groupName: "size", valueName: "6mm" }] }))),
