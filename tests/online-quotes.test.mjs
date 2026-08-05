@@ -38,6 +38,7 @@ vm.runInContext(source, context);
 
 assert.match(source, /readRequest\("\/pors\/quotes"\)/);
 assert.match(source, /X-Pors-Quote-Read-Token/);
+assert.match(source, /var writeToken = String\(global\.PORS_NOBLESSE_WRITE_TOKEN \|\| ""\)\.trim\(\)/);
 assert.match(source, /deviceWriteRequest\(/);
 assert.match(source, /X-Pors-Quote-Write-Token/);
 assert.match(source, /"\/pors\/quotes\/" \+ encodeURIComponent\(quote\.id\) \+ path/);

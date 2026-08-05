@@ -253,10 +253,12 @@
 
   function quoteReadToken() {
     var configured = String(global.PORS_NOBLESSE_READ_TOKEN || "").trim();
-    if (!configured) {
+    if (configured) return configured;
+    var writeToken = String(global.PORS_NOBLESSE_WRITE_TOKEN || "").trim();
+    if (!writeToken) {
       throw new Error("웹 견적 읽기 설정이 필요합니다.");
     }
-    return configured;
+    return writeToken;
   }
 
   function quoteWriteToken() {
