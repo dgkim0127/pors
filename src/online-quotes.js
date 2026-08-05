@@ -339,23 +339,6 @@
     );
   }
 
-  function statusLabel(quote) {
-    var state = quote && quote.pos && quote.pos.state;
-    if (state && state.publishedAt) return "고객 공개";
-    if (state && state.finalizedAt) return "내부 확정";
-    var status = (quote && (quote.status || quote.adminStatus)) || "requested";
-    var labels = {
-      requested: "접수",
-      reviewing: "확인 중",
-      draft: "초안",
-      sent: "발행",
-      accepted: "승인",
-      rejected: "거절",
-      cancelled: "취소",
-    };
-    return labels[status] || status;
-  }
-
   function field(label, control, className) {
     return h(
       "label",
@@ -649,7 +632,6 @@
           "← 목록"
         ),
         h("div", null,
-          h("p", { className: "online-quotes-eyebrow" }, statusLabel(Object.assign({}, quote, { pos: detail.pos }))),
           h("h2", null, quote.quoteNumber || quote.inquiryNumber || "온라인 견적"),
           h("p", null, webBuyerLabel(quote))
         )
