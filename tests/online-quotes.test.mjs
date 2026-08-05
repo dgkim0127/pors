@@ -38,11 +38,18 @@ vm.runInContext(source, context);
 
 assert.match(source, /readRequest\("\/pors\/quotes"\)/);
 assert.match(source, /X-Pors-Quote-Read-Token/);
+assert.match(source, /deviceWriteRequest\(/);
+assert.match(source, /X-Pors-Quote-Write-Token/);
+assert.match(source, /"\/pors\/quotes\/" \+ encodeURIComponent\(quote\.id\) \+ path/);
 assert.match(source, /if \(features\(\)\.read\) loadQuotes\(\)/);
-assert.doesNotMatch(source, /if \(user && features\(\)\.read\) loadQuotes\(\)/);
-assert.match(source, /로그인 없이 조회 중입니다/);
+assert.doesNotMatch(source, /OnlineQuoteLogin/);
+assert.doesNotMatch(source, /getNamedAuth/);
+assert.doesNotMatch(source, /\/admin\/pos\/quotes/);
+assert.doesNotMatch(source, /작업 로그인/);
+assert.match(source, /await loadQuoteDetail\(quote\.id\)/);
 assert.match(source, /disabled: !props\.online \|\| !props\.canWrite/);
 assert.match(viteConfigSource, /PORS_NOBLESSE_READ_TOKEN/);
+assert.match(viteConfigSource, /PORS_NOBLESSE_WRITE_TOKEN/);
 assert.match(viteConfigSource, /pors-device-config\.js/);
 
 const {

@@ -4,6 +4,8 @@ import react from "@vitejs/plugin-react";
 function porsDeviceConfigSource() {
   return `window.PORS_NOBLESSE_READ_TOKEN = ${JSON.stringify(
     process.env.PORS_NOBLESSE_READ_TOKEN || ""
+  )};\nwindow.PORS_NOBLESSE_WRITE_TOKEN = ${JSON.stringify(
+    process.env.PORS_NOBLESSE_WRITE_TOKEN || ""
   )};\n`;
 }
 
