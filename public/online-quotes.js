@@ -1100,57 +1100,6 @@
     );
   }
 
-  function ReceiptLinker(props) {
-    var selectedHook = React.useState("");
-    var selectedId = selectedHook[0];
-    var setSelectedId = selectedHook[1];
-    var selectedSale = (props.sales || []).find(function (sale) {
-      return String(sale.id) === String(selectedId);
-    });
-    if (!props.published) return null;
-    return h(
-      "details",
-      { className: "online-quote-extra" },
-      h("summary", null, "기존 PORS 영수증 수동 연결"),
-      h("div", { className: "online-quote-extra__body" },
-        h("p", null, "계산 화면에서 이미 저장·출력한 영수증만 연결합니다. 새 판매나 결제는 만들지 않습니다."),
-        field(
-          "기존 영수증",
-          h(
-            "select",
-            {
-              value: selectedId,
-              disabled: !props.online || !props.canWrite || props.busy,
-              onChange: function (event) { setSelectedId(event.target.value); },
-            },
-            h("option", { value: "" }, "영수증 선택"),
-            (props.sales || []).map(function (sale) {
-              var total = sale.totals && sale.totals.total;
-              return h(
-                "option",
-                { key: sale.id, value: sale.id },
-                (sale.customerName || "거래처") + " · " + formatMoney(total) + " · " + String(sale.createdAt || "").slice(0, 10)
-              );
-            })
-          )
-        ),
-        h(
-          "button",
-          {
-            type: "button",
-            disabled: !props.online || !props.canWrite || props.busy || !selectedSale || Boolean(props.linkedReceiptId),
-            onClick: function () {
-              if (global.confirm("선택한 기존 PORS 영수증을 이 웹 견적에 연결할까요?")) {
-                props.onLink(selectedSale);
-              }
-            },
-          },
-          props.linkedReceiptId ? "영수증 연결됨" : "선택한 영수증 연결"
-        )
-      )
-    );
-  }
-
   function QuoteDetail(props) {
     var detail = props.detail;
     var quote = detail.quote || detail;
@@ -1271,16 +1220,7 @@
           },
           published ? "고객 공개됨" : "고객에게 견적 공개"
         )
-      ),
-      h(ReceiptLinker, {
-        online: props.online,
-        canWrite: props.canWrite,
-        busy: props.busy,
-        published: published,
-        linkedReceiptId: detail.pos && detail.pos.state && detail.pos.state.linkedReceiptId,
-        sales: props.sales,
-        onLink: props.onLinkReceipt,
-      })
+      )
     );
   }
 
@@ -1501,37 +1441,6 @@
       writeQuote("preview", "/price-preview", "", nextDraft);
     }
 
-    async function linkExistingReceipt(sale) {
-      if (!detail) return;
-      setBusy(true);
-      setError("");
-      try {
-        var quote = detail.quote || detail;
-        var response = await deviceWriteRequest(
-          "/pors/quotes/" + encodeURIComponent(quote.id) + "/receipt-link",
-          {
-            method: "POST",
-            body: buildReceiptLinkPayload(detail, sale),
-          }
-        );
-        applyWriteResponse(response);
-        await loadQuotes();
-      } catch (linkError) {
-        if (linkError.status === 409) {
-          try {
-            await loadQuoteDetail(quote.id);
-            setError("다른 기기에서 먼저 변경했습니다. 최신 견적을 불러왔으니 내용을 다시 확인해 주세요.");
-          } catch (reloadError) {
-            setError("다른 기기에서 먼저 변경했습니다. 최신 견적을 불러오지 못했습니다: " + reloadError.message);
-          }
-        } else {
-          setError(linkError.message);
-        }
-      } finally {
-        setBusy(false);
-      }
-    }
-
     if (detail && draft) {
       return h(QuoteDetail, {
         canWrite: canWrite,
@@ -1543,7 +1452,6 @@
         online: online,
         busy: busy,
         error: error,
-        sales: props.sales || [],
         onBack: function () {
           setDetail(null);
           setDraft(null);
@@ -1571,7 +1479,6 @@
         onPublish: function () {
           writeQuote("publish", "/publish");
         },
-        onLinkReceipt: linkExistingReceipt,
       });
     }
     return h(QuoteList, {

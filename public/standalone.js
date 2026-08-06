@@ -2221,7 +2221,6 @@
           window.PorsOnlineQuotes
             ? h(window.PorsOnlineQuotes.Screen, {
                 online: online,
-                sales: state.sales,
                 onPrintReceipt: registerAndPrintOnlineQuote
               })
             : h("main", { className: "online-quotes-unavailable" },
