@@ -5137,16 +5137,16 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-prepared-control {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 900;
 }
 
 .online-quote-quantity-stepper {
-  min-height: 54px;
+  min-height: 44px;
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: stretch;
   overflow: hidden;
   border: 2px solid var(--ink);
@@ -5161,7 +5161,7 @@ body.native-printing .receipt-preview-page .receipt {
   padding: 0;
   background: #f4f2ed;
   color: var(--ink);
-  font-size: 24px;
+  font-size: 21px;
   font-weight: 800;
   line-height: 1;
 }
@@ -5185,7 +5185,7 @@ body.native-printing .receipt-preview-page .receipt {
   color: var(--ink);
   text-align: center;
   font: inherit;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 900;
 }
 
