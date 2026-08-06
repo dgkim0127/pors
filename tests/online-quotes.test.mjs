@@ -172,6 +172,7 @@ assert.match(source, /online-quote-quantity-stepper/);
 assert.match(source, /function previewPreparation\(itemId, patch\)/);
 assert.match(source, /writeQuote\("preview", "\/price-preview", "", nextDraft\)/);
 assert.match(source, /onPreparationSelected: previewPreparation/);
+assert.doesNotMatch(source, /가격 다시 계산/);
 assert.match(source, /준비 수량 1개 줄이기/);
 assert.match(source, /준비 수량 1개 늘리기/);
 assert.doesNotMatch(source, /h\("small", null, quote\.inquiryNumber/);

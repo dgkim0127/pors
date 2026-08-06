@@ -893,15 +893,6 @@
           "button",
           {
             type: "button",
-            disabled: !props.online || !props.canWrite || props.busy || finalized || !features().pricing,
-            onClick: props.onPreview,
-          },
-          "가격 다시 계산"
-        ),
-        h(
-          "button",
-          {
-            type: "button",
             className: "online-quotes-primary",
             disabled: !props.online || !props.canWrite || props.busy || finalized || !features().finalize,
             onClick: props.onFinalize,
@@ -1183,9 +1174,6 @@
         onPreparationSelected: previewPreparation,
         onSavePicking: function () {
           writeQuote("picking", "/picking");
-        },
-        onPreview: function () {
-          writeQuote("preview", "/price-preview");
         },
         onFinalize: function () {
           writeQuote(
