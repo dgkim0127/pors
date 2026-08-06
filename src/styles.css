@@ -5005,7 +5005,8 @@ body.native-printing .receipt-preview-page .receipt {
   margin: 6px 0 0;
 }
 
-.online-quote-options > div {
+.online-quote-options__pair,
+.online-quote-options__status {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -5029,6 +5030,41 @@ body.native-printing .receipt-preview-page .receipt {
   font-weight: 900;
   line-height: 1.25;
   white-space: nowrap;
+}
+
+.online-quote-options__status {
+  border: 1px solid #d5d0c6;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #827b70;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.online-quote-options__status i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.online-quote-options__status.is-ready {
+  border-color: #b8dfaa;
+  background: #edf9e8;
+  color: #5d9d48;
+}
+
+.online-quote-options__status.is-partial {
+  border-color: #ead2a5;
+  background: #fff7e7;
+  color: #9a7028;
+}
+
+.online-quote-options__status.is-pending {
+  background: #f2f0eb;
 }
 
 .online-quote-item__picking,
@@ -5127,7 +5163,6 @@ body.native-printing .receipt-preview-page .receipt {
 }
 
 .online-quote-item--sold-out .online-quote-item__product,
-.online-quote-item--sold-out .online-quote-quantity-summary,
 .online-quote-item--sold-out .online-quote-field {
   opacity: 0.58;
 }

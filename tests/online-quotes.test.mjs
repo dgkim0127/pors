@@ -165,6 +165,8 @@ assert.match(source, /준비 가능한 수량을 입력하세요\./);
 assert.match(source, /online-quote-item--sold-out/);
 assert.match(source, /label: "갯수", value: quantity \+ "개"/);
 assert.doesNotMatch(source, /h\("span", null, "요청 ", h\("b", null, requested\)\)/);
+assert.doesNotMatch(source, /online-quote-quantity-summary/);
+assert.match(source, /preparationStatus\.label/);
 assert.doesNotMatch(source, /h\("small", null, quote\.inquiryNumber/);
 assert.doesNotMatch(source, /className: "online-quote-status" }, statusLabel\(quote\)/);
 assert.doesNotMatch(source, /h\("p", null, webBuyerLabel\(quote\)\)/);

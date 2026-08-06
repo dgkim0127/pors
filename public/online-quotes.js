@@ -477,6 +477,7 @@
   function OptionList(props) {
     var pairs = optionPairs(props.item);
     var quantity = Number(props.requestedQuantity);
+    var preparedQuantity = clampQuantity(props.preparedQuantity, quantity);
     if (Number.isFinite(quantity) && quantity >= 0) {
       var quantityIndex = pairs.length;
       for (var index = 0; index < pairs.length; index += 1) {
@@ -488,17 +489,29 @@
       pairs.splice(quantityIndex, 0, { label: "갯수", value: quantity + "개" });
     }
     if (!pairs.length) return null;
+    var preparationStatus =
+      quantity > 0 && preparedQuantity >= quantity
+        ? { className: "is-ready", label: "준비 완료" }
+        : preparedQuantity > 0
+          ? { className: "is-partial", label: "부분 준비" }
+          : { className: "is-pending", label: "준비 필요" };
     return h(
       "dl",
       { className: "online-quote-options" },
       pairs.map(function (pair, index) {
         return h(
           "div",
-          { key: pair.label + ":" + pair.value + ":" + index },
+          { key: pair.label + ":" + pair.value + ":" + index, className: "online-quote-options__pair" },
           h("dt", null, pair.label),
           h("dd", null, pair.value)
         );
-      })
+      }),
+      h(
+        "div",
+        { className: "online-quote-options__status " + preparationStatus.className },
+        h("i", { "aria-hidden": "true" }),
+        preparationStatus.label
+      )
     );
   }
 
@@ -563,16 +576,16 @@
         h("div", null,
           h("strong", null, item.productName || item.name || "상품"),
           h("code", null, item.productCode || item.code || ""),
-          h(OptionList, { item: item, requestedQuantity: requested })
+          h(OptionList, {
+            item: item,
+            requestedQuantity: requested,
+            preparedQuantity: prepared,
+          })
         )
       ),
       h(
         "div",
         { className: "online-quote-item__picking" },
-        h("div", { className: "online-quote-quantity-summary" },
-          h("span", null, "준비 ", h("b", null, prepared)),
-          h("span", null, "취소 ", h("b", null, cancelled))
-        ),
         field(
           "준비 수량",
           h("input", {
