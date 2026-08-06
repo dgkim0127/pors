@@ -193,20 +193,39 @@
 
   function draftFromQuote(detail) {
     var items = quoteItemsFromDetail(detail) || [];
+    var pos = (detail && detail.pos) || {};
+    var state = pos.state || {};
+    var pricing = pricingFromDetail(detail) || {};
+    var pricingByItemId = {};
+    ((pricing && pricing.lines) || []).forEach(function (line) {
+      var itemId = line && (line.itemId || line.id);
+      if (itemId != null) pricingByItemId[String(itemId)] = line;
+    });
+    var finalized = Boolean(pos.finalizedAt || state.finalizedAt);
     return {
       items: items.map(function (item) {
         var requested = Number(item.requestedQuantity || item.quantity || 0);
+        var pricingLine = pricingByItemId[String(item.id)] || null;
+        var preparedFromPricing =
+          pricingLine &&
+          (pricingLine.preparedQuantity ?? pricingLine.quantity);
         var prepared =
-          item.confirmedQuantity == null
-            ? requested
-            : Number(item.confirmedQuantity);
+          preparedFromPricing == null
+            ? item.confirmedQuantity == null
+              ? requested
+              : Number(item.confirmedQuantity)
+            : Number(preparedFromPricing);
         var fulfillmentStatus = String(item.fulfillmentStatus || "").toLowerCase();
         return {
           id: item.id,
           preparedQuantity: clampQuantity(prepared, requested),
           preparationMarked:
             prepared > 0 &&
-            (fulfillmentStatus === "ready" || fulfillmentStatus === "partial"),
+            (item.preparationMarked === true ||
+              Boolean(pricingLine) ||
+              (finalized &&
+                (fulfillmentStatus === "ready" ||
+                  fulfillmentStatus === "partial"))),
           cancellationReason: item.cancellationReason || "",
           cancellationNote: item.cancellationNote || "",
           itemNote: item.itemNote || "",

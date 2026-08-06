@@ -141,6 +141,39 @@ assert.deepEqual(JSON.parse(JSON.stringify(draftFromQuote(topLevelItemsDetail)))
   ],
 });
 
+const legacyReadyDetail = {
+  quote: {
+    id: "quote-legacy-ready",
+    items: [{
+      id: "line-legacy-ready",
+      requestedQuantity: 1,
+      confirmedQuantity: 1,
+      fulfillmentStatus: "ready",
+    }],
+  },
+  pos: { state: { version: 1 } },
+};
+assert.equal(
+  draftFromQuote(legacyReadyDetail).items[0].preparationMarked,
+  false,
+);
+
+const previewedReadyDetail = {
+  quote: legacyReadyDetail.quote,
+  pos: {
+    state: {
+      version: 2,
+      lastPreview: {
+        lines: [{ itemId: "line-legacy-ready", preparedQuantity: 1 }],
+      },
+    },
+  },
+};
+assert.equal(
+  draftFromQuote(previewedReadyDetail).items[0].preparationMarked,
+  true,
+);
+
 const finalizedDetail = {
   quote: { id: "quote-finalized" },
   items: [{
@@ -328,6 +361,7 @@ assert.match(source, /준비 가능한 수량을 입력하세요\./);
 assert.match(source, /online-quote-item--sold-out/);
 assert.match(source, /online-quote-item--prepared/);
 assert.match(source, /Boolean\(draft\.preparationMarked\) && prepared > 0 && !soldOut/);
+assert.match(source, /Boolean\(pricingLine\)/);
 assert.match(source, /label: "갯수", value: quantity \+ "개"/);
 assert.doesNotMatch(source, /h\("span", null, "요청 ", h\("b", null, requested\)\)/);
 assert.doesNotMatch(source, /online-quote-quantity-summary/);
