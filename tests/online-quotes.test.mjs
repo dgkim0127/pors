@@ -71,6 +71,7 @@ const {
   quoteWriteMetadata,
   requestedQuantityFromDetail,
   resolveItemImage,
+  upsertOnlineQuoteSale,
   webBuyerLabel,
 } = windowObject.PorsOnlineQuotes.core;
 
@@ -221,7 +222,7 @@ assert.throws(() => buildReceiptLinkPayload(detail, null));
 const printableReceipt = buildPrintableReceipt({
   quote: { id: "quote-print", companyName: "Sample shop" },
   items: [{ id: "line-print", productName: "Clover", requestedQuantity: 2 }],
-  pos: { state: { finalizedAt: "2026-08-06T02:00:00.000Z" } },
+  pos: { state: { version: 4, finalizedAt: "2026-08-06T02:00:00.000Z" } },
 }, {
   subtotal: 3600,
   supplyAmount: 3600,
@@ -231,6 +232,10 @@ const printableReceipt = buildPrintableReceipt({
 });
 assert.deepEqual(JSON.parse(JSON.stringify(printableReceipt)), {
   id: "online_quote_quote-print",
+  source: "online_quote",
+  sourceQuoteId: "quote-print",
+  sourceQuoteVersion: 4,
+  sourceQuoteFinalizedAt: "2026-08-06T02:00:00.000Z",
   createdAt: "2026-08-06T02:00:00.000Z",
   customerId: null,
   customerName: "Sample shop",
@@ -249,6 +254,46 @@ assert.deepEqual(JSON.parse(JSON.stringify(printableReceipt)), {
     deductionTaxIncluded: false,
   },
 });
+
+const firstPrintedSale = upsertOnlineQuoteSale([], printableReceipt, "2026-08-06T03:00:00.000Z");
+assert.equal(firstPrintedSale.created, true);
+assert.equal(firstPrintedSale.updated, false);
+assert.equal(firstPrintedSale.sales.length, 1);
+assert.equal(firstPrintedSale.sale.createdAt, "2026-08-06T03:00:00.000Z");
+assert.equal(firstPrintedSale.sale.registeredAt, "2026-08-06T03:00:00.000Z");
+
+const unchangedReprint = upsertOnlineQuoteSale(firstPrintedSale.sales, printableReceipt, "2026-08-06T04:00:00.000Z");
+assert.equal(unchangedReprint.changed, false);
+assert.equal(unchangedReprint.sales.length, 1);
+
+const revisedReceipt = Object.assign({}, printableReceipt, {
+  sourceQuoteVersion: 6,
+  sourceQuoteFinalizedAt: "2026-08-06T05:00:00.000Z",
+  lines: [{ id: "line-print", name: "Clover", quantity: 1, price: 1800 }],
+  totals: Object.assign({}, printableReceipt.totals, {
+    subtotal: 1800,
+    supply: 1800,
+    vat: 180,
+    total: 1980,
+  }),
+});
+const revisedPrintedSale = upsertOnlineQuoteSale(firstPrintedSale.sales, revisedReceipt, "2026-08-06T05:10:00.000Z");
+assert.equal(revisedPrintedSale.created, false);
+assert.equal(revisedPrintedSale.updated, true);
+assert.equal(revisedPrintedSale.sales.length, 1);
+assert.equal(revisedPrintedSale.sale.createdAt, "2026-08-06T03:00:00.000Z");
+assert.equal(revisedPrintedSale.sale.totals.total, 1980);
+assert.equal(revisedPrintedSale.sale.editHistory.length, 1);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(revisedPrintedSale.sale.editHistory[0].changes)),
+  ["품목 또는 준비 수량 변경", "총액 변경"],
+);
+
+const stalePrintedSale = upsertOnlineQuoteSale(revisedPrintedSale.sales, printableReceipt, "2026-08-06T06:00:00.000Z");
+assert.equal(stalePrintedSale.stale, true);
+assert.equal(stalePrintedSale.changed, false);
+assert.equal(stalePrintedSale.sales.length, 1);
+assert.equal(stalePrintedSale.sale.totals.total, 1980);
 
 assert.equal(webBuyerLabel({ companyName: "Sample shop" }), "웹-Sample shop");
 assert.equal(webBuyerLabel({}), "웹-웹 거래처");
@@ -289,7 +334,12 @@ assert.match(source, /props\.dirty \|\| !finalized \|\| published/);
 assert.match(source, /props\.dirty \? "견적 다시 확정" : "견적 확정됨"/);
 assert.match(source, /"영수증 출력"/);
 assert.match(source, /buildPrintableReceipt\(detail, pricing \|\| \{\}\)/);
-assert.match(standaloneSource, /onPrintReceipt: setPrintSale/);
+assert.match(standaloneSource, /function registerAndPrintOnlineQuote\(receipt\)/);
+assert.match(standaloneSource, /onPrintReceipt: registerAndPrintOnlineQuote/);
+assert.match(standaloneSource, /upsertSaleDocument\(result\.sale\)/);
+assert.match(standaloneSource, /if \(!authorized && !loginPromptOpen\)/);
+assert.match(standaloneSource, /guest-online-quote-shell/);
+assert.match(standaloneSource, /"웹 견적으로 돌아가기"/);
 assert.doesNotMatch(source, /가격 다시 계산/);
 assert.match(source, /준비 수량 1개 줄이기/);
 assert.match(source, /준비 수량 1개 늘리기/);

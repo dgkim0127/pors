@@ -1448,6 +1448,8 @@
     }
     var authHook = React.useState(readAuth());
     var authorized = authHook[0], setAuthorized = authHook[1];
+    var loginPromptHook = React.useState(false);
+    var loginPromptOpen = loginPromptHook[0], setLoginPromptOpen = loginPromptHook[1];
     var settlementHook = React.useState(readSettlementAuth());
     var settlementAccess = settlementHook[0], setSettlementAccess = settlementHook[1];
     var keyHook = React.useState("");
@@ -1767,6 +1769,7 @@
       writeAuth(settlementLogin);
       setAuthorized(true);
       setSettlementAccess(settlementLogin);
+      setLoginPromptOpen(false);
     }
 
     function addItem(item, forceNewLine, override) {
@@ -2013,6 +2016,41 @@
       setPrintSale(sale);
     }
 
+    function registerAndPrintOnlineQuote(receipt) {
+      var quoteCore = window.PorsOnlineQuotes && window.PorsOnlineQuotes.core;
+      if (!quoteCore || typeof quoteCore.upsertOnlineQuoteSale !== "function") {
+        showSaveNotice("warning", "웹 견적 매출 등록 기능을 불러오지 못했습니다.");
+        return;
+      }
+      var changedAt = new Date().toISOString();
+      var result = quoteCore.upsertOnlineQuoteSale(state.sales || [], receipt, changedAt);
+      if (result.stale) {
+        showSaveNotice("warning", "더 최신 견적 매출이 있어 이전 금액으로 덮어쓰지 않았습니다.");
+        setPrintSale(result.sale);
+        return;
+      }
+      if (!result.changed) {
+        showSaveNotice("success", "이미 등록된 매출을 유지하고 영수증을 다시 엽니다.");
+        setPrintSale(result.sale);
+        return;
+      }
+      setState(function (current) {
+        var latest = quoteCore.upsertOnlineQuoteSale(current.sales || [], receipt, changedAt);
+        if (!latest.changed) return current;
+        return Object.assign({}, current, { sales: latest.sales });
+      });
+      upsertSaleDocument(result.sale).then(function (ok) {
+        var successMessage = result.created
+          ? "웹 견적 매출 등록 완료"
+          : "수정된 웹 견적으로 기존 매출 갱신 완료";
+        showSaveNotice(
+          ok && online ? "success" : "warning",
+          ok && online ? successMessage : successMessage + " · 이 기기에 저장됨 · Firebase 연결 확인 필요"
+        );
+      });
+      setPrintSale(result.sale);
+    }
+
     function deleteSale(sale, reason) {
       if (!sale || !sale.id) return;
       if (!settlementAccess) return;
@@ -2147,6 +2185,26 @@
       setManualCustomerName("");
     }
 
+    if (!authorized && !loginPromptOpen) return h(React.Fragment, null,
+      h("div", { className: "app-shell guest-online-quote-shell" },
+        h("header", { className: "topbar" },
+          h("div", { className: "brand-row" }, h("strong", null, state.store.name)),
+          h("button", { className: "ghost small", type: "button", onClick: function () { setLoginPromptOpen(true); } }, "PORS 로그인")
+        ),
+        window.PorsOnlineQuotes
+          ? h(window.PorsOnlineQuotes.Screen, {
+              online: online,
+              sales: state.sales,
+              onPrintReceipt: registerAndPrintOnlineQuote
+            })
+          : h("main", { className: "online-quotes-unavailable" },
+              h("p", null, "웹 견적 화면을 불러오지 못했습니다.")
+            )
+      ),
+      printSale && h(PrintSheet, { sale: printSale, store: state.store, onClose: function () { setPrintSale(null); } }),
+      saveNotice ? h("div", { className: "save-toast " + saveNotice.type, role: "status" }, saveNotice.message) : null
+    );
+
     if (!authorized) return h("main", { className: "login-screen" },
       h("section", { className: "login-card" },
         h("div", { className: "brand-mark" }, "P"),
@@ -2157,6 +2215,7 @@
           h("input", { value: adminKey, onChange: function (e) { setAdminKey(e.target.value); }, placeholder: "0000", type: "password", autoFocus: true }),
           h("button", { className: "primary", type: "submit" }, "시작하기")
         ),
+        h("button", { className: "ghost", type: "button", onClick: function () { setLoginPromptOpen(false); } }, "웹 견적으로 돌아가기"),
         h("small", null, "파일 직접 실행 모드")
       )
     );
@@ -2188,7 +2247,7 @@
             ? h(window.PorsOnlineQuotes.Screen, {
                 online: online,
                 sales: state.sales,
-                onPrintReceipt: setPrintSale
+                onPrintReceipt: registerAndPrintOnlineQuote
               })
             : h("main", { className: "online-quotes-unavailable" },
                 h("p", null, "웹 견적 화면을 불러오지 못했습니다.")

@@ -410,6 +410,8 @@
     var quote = (detail && (detail.quote || detail)) || {};
     var pos = (detail && detail.pos) || {};
     var state = pos.state || {};
+    var quoteId = String(quote.id || quote.quoteNumber || Date.now());
+    var finalizedAt = pos.finalizedAt || state.finalizedAt || new Date().toISOString();
     var lines = quoteReceiptLines(
       pricing,
       quoteItemsFromDetail(detail)
@@ -422,8 +424,12 @@
       };
     });
     return {
-      id: "online_quote_" + String(quote.id || quote.quoteNumber || Date.now()),
-      createdAt: pos.finalizedAt || state.finalizedAt || new Date().toISOString(),
+      id: "online_quote_" + quoteId,
+      source: "online_quote",
+      sourceQuoteId: quoteId,
+      sourceQuoteVersion: Number(state.version || pos.version || quote.version || 0),
+      sourceQuoteFinalizedAt: finalizedAt,
+      createdAt: finalizedAt,
       customerId: null,
       customerName: quote.companyName || quote.buyerCompany || "웹 견적",
       writerName: "웹 견적",
@@ -440,6 +446,128 @@
         deduction: 0,
         deductionTaxIncluded: false,
       },
+    };
+  }
+
+  function onlineQuoteSaleFingerprint(sale) {
+    var totals = (sale && sale.totals) || {};
+    return JSON.stringify({
+      sourceQuoteVersion: Number(sale && sale.sourceQuoteVersion || 0),
+      sourceQuoteFinalizedAt: sale && sale.sourceQuoteFinalizedAt || null,
+      customerName: String(sale && sale.customerName || ""),
+      lines: ((sale && sale.lines) || []).map(function (line) {
+        return {
+          id: String(line.id || ""),
+          name: String(line.name || ""),
+          quantity: Number(line.quantity || 0),
+          price: asMoney(line.price),
+        };
+      }),
+      totals: {
+        subtotal: asMoney(totals.subtotal),
+        discount: asMoney(totals.discount),
+        supply: asMoney(totals.supply),
+        vat: asMoney(totals.vat),
+        total: asMoney(totals.total),
+      },
+    });
+  }
+
+  function onlineQuoteSaleChanges(currentSale, nextSale) {
+    var changes = [];
+    if (String(currentSale.customerName || "") !== String(nextSale.customerName || "")) {
+      changes.push("매장명 변경");
+    }
+    if (JSON.stringify(currentSale.lines || []) !== JSON.stringify(nextSale.lines || [])) {
+      changes.push("품목 또는 준비 수량 변경");
+    }
+    if (asMoney(currentSale.totals && currentSale.totals.total) !== asMoney(nextSale.totals && nextSale.totals.total)) {
+      changes.push("총액 변경");
+    }
+    return changes.length ? changes : ["웹 견적 최신 확정본 반영"];
+  }
+
+  function upsertOnlineQuoteSale(sales, receipt, changedAt) {
+    if (!receipt || !receipt.id) throw new Error("웹 견적 영수증 정보가 필요합니다.");
+    var currentSales = Array.isArray(sales) ? sales.slice() : [];
+    var sourceQuoteId = String(
+      receipt.sourceQuoteId || String(receipt.id).replace(/^online_quote_/, "")
+    );
+    if (!sourceQuoteId) throw new Error("웹 견적 식별자가 필요합니다.");
+    var timestamp = changedAt || new Date().toISOString();
+    var receiptVersion = Number(receipt.sourceQuoteVersion || 0);
+    var index = currentSales.findIndex(function (sale) {
+      return sale && (
+        String(sale.id || "") === String(receipt.id) ||
+        String(sale.sourceQuoteId || "") === sourceQuoteId
+      );
+    });
+    var incoming = Object.assign({}, receipt, {
+      source: "online_quote",
+      sourceQuoteId: sourceQuoteId,
+      sourceQuoteVersion: receiptVersion,
+    });
+
+    if (index < 0) {
+      var createdSale = Object.assign({}, incoming, {
+        createdAt: timestamp,
+        registeredAt: timestamp,
+        updatedAt: timestamp,
+      });
+      return {
+        sales: [createdSale].concat(currentSales),
+        sale: createdSale,
+        created: true,
+        updated: false,
+        changed: true,
+        stale: false,
+      };
+    }
+
+    var currentSale = currentSales[index];
+    var currentVersion = Number(currentSale.sourceQuoteVersion || 0);
+    if (currentVersion > 0 && currentVersion > receiptVersion) {
+      return {
+        sales: currentSales,
+        sale: currentSale,
+        created: false,
+        updated: false,
+        changed: false,
+        stale: true,
+      };
+    }
+
+    var nextSale = Object.assign({}, currentSale, incoming, {
+      id: currentSale.id || incoming.id,
+      createdAt: currentSale.createdAt || timestamp,
+      registeredAt: currentSale.registeredAt || currentSale.createdAt || timestamp,
+    });
+    if (onlineQuoteSaleFingerprint(currentSale) === onlineQuoteSaleFingerprint(nextSale)) {
+      return {
+        sales: currentSales,
+        sale: currentSale,
+        created: false,
+        updated: false,
+        changed: false,
+        stale: false,
+      };
+    }
+
+    nextSale.updatedAt = timestamp;
+    nextSale.editHistory = (currentSale.editHistory || []).concat([{
+      id: "online_quote_sync_" + timestamp.replace(/[^0-9]/g, ""),
+      editedAt: timestamp,
+      editor: "웹 견적 재확정",
+      changes: onlineQuoteSaleChanges(currentSale, nextSale),
+    }]).slice(-200);
+    currentSales[index] = nextSale;
+    return {
+      sales: currentSales,
+      sale: nextSale,
+      created: false,
+      updated: true,
+      changed: true,
+      stale: false,
     };
   }
 
@@ -1398,6 +1526,7 @@
       buildWritePayload: buildWritePayload,
       buildReceiptLinkPayload: buildReceiptLinkPayload,
       buildPrintableReceipt: buildPrintableReceipt,
+      upsertOnlineQuoteSale: upsertOnlineQuoteSale,
       apiErrorMessage: apiErrorMessage,
       draftFromQuote: draftFromQuote,
       pricingFromDetail: pricingFromDetail,

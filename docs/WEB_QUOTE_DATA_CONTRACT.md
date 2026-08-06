@@ -13,6 +13,7 @@
 - `PORS_NOBLESSE_API_BASE_URL` is the Noblesse API base URL.
 - `PORS_NOBLESSE_READ_TOKEN` enables read-only devices to read the web-quote list and detail.
 - `PORS_NOBLESSE_WRITE_TOKEN` enables prepare, price preview, internal finalization, customer publication, and manual receipt linking without a separate Noblesse/Firebase login.
+- The web-quote screen is available without the normal PORS administrator login; normal calculation, management, history, and settlement screens keep their existing login boundary.
 - A managed write device may use its write token for quote reads too, so it does not need a second credential.
 - The write token is a managed-device credential: it is accepted only by `/api/pors/quotes/*`, cannot call Noblesse admin or Buyer routes, and must be provisioned only to managed PORS devices. Rotate it when a device is lost or replaced.
 - Firebase service accounts, PostgreSQL credentials, and private server keys must never be embedded in the app.
@@ -106,5 +107,9 @@ Receipt link payload contains only a snapshot and does not allow Noblesse to mut
 - The Noblesse server calculates web quote pricing.
 - Web quote processing does not use the PORS threshold discount, customer discount, deduction, or group-purchase calculation.
 - Finalizing or publishing a web quote does not create a PORS sale.
-- A PORS sale enters local sales history only through the existing PORS save flow.
+- The first `영수증 출력` action for a finalized web quote registers one PORS sale with a deterministic quote-based sale ID.
+- Reprinting the same finalized version does not add another sale.
+- After a quote is edited and finalized again, the next `영수증 출력` updates the existing PORS sale lines and totals while preserving its original registration date and recording an edit history entry.
+- A stale quote version cannot overwrite a newer PORS sale snapshot.
+- This receipt action does not create an order or payment and does not deduct inventory.
 - Linking a receipt records a read-only receipt snapshot on the quote.
