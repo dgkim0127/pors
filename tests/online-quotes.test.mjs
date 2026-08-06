@@ -67,6 +67,7 @@ const {
   publicationIsCurrent,
   quoteItemsFromDetail,
   quoteReceiptLines,
+  quoteListMeta,
   quoteListQuantity,
   quoteWriteMetadata,
   requestedQuantityFromDetail,
@@ -311,10 +312,14 @@ assert.equal(requestedQuantityFromDetail({}), null);
 assert.equal(quoteListQuantity({ requestedQuantity: 7, itemCount: 2 }), 7);
 assert.equal(quoteListQuantity({ items: [{ requestedQuantity: 4 }] }), 4);
 assert.equal(quoteListQuantity({ itemCount: 3 }), 3);
+assert.equal(quoteListMeta({}), "웹 견적");
+assert.equal(quoteListMeta({ updatedByName: "최여진" }), "최여진");
+assert.match(quoteListMeta({ updatedAt: "2026-08-06T07:04:00.000Z" }), /^(오전|오후) \d{2}:\d{2} · 웹 견적$/);
 assert.match(source, /className: "online-quotes-refresh"/);
 assert.match(source, /"aria-label": "새로고침"/);
 assert.match(source, /className: "online-quotes-toolbar"/);
 assert.match(source, /online-quote-list-row__chevron/);
+assert.match(source, /online-quote-list-row__meta/);
 assert.match(source, /online-quote-list-row__summary/);
 assert.match(source, /"부분 준비"/);
 assert.match(source, /준비 가능한 수량을 입력하세요\./);

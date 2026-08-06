@@ -137,6 +137,26 @@
     return Number.isFinite(itemCount) && itemCount >= 0 ? itemCount : 0;
   }
 
+  function quoteListMeta(quote) {
+    var posState = quote && quote.pos && quote.pos.state || {};
+    var rawTime = quote && (
+      quote.updatedAt ||
+      quote.requestedAt ||
+      quote.submittedAt ||
+      quote.createdAt
+    ) || posState.updatedAt || posState.finalizedAt || "";
+    var writer = String(
+      quote && (quote.updatedByName || quote.assigneeName || quote.writerName) || "웹 견적"
+    ).trim() || "웹 견적";
+    var date = rawTime ? new Date(rawTime) : null;
+    if (!date || Number.isNaN(date.getTime())) return writer;
+    var hours = date.getHours();
+    var period = hours < 12 ? "오전" : "오후";
+    var displayHour = hours % 12 || 12;
+    var time = period + " " + String(displayHour).padStart(2, "0") + ":" + String(date.getMinutes()).padStart(2, "0");
+    return time + " · " + writer;
+  }
+
   function resolveItemImageUrl(value) {
     var imageUrl = String(value || "").trim();
     if (!imageUrl || imageUrl.charAt(0) !== "/") return imageUrl;
@@ -749,6 +769,7 @@
                   h("strong", null, webBuyerLabel(quote)),
                   h("span", { className: "online-quote-list-row__chevron", "aria-hidden": "true" }, "⌄")
                 ),
+                h("small", { className: "online-quote-list-row__meta" }, quoteListMeta(quote)),
                 h("span", { className: "online-quote-list-row__summary" },
                   h("strong", { className: "online-quote-list-row__price" }, pricing ? formatMoney(pricing.totalAmount) : formatMoney(quote.confirmedTotal || quote.requestedTotal)),
                   h("span", { className: "online-quote-list-row__quantity" }, quoteListQuantity(quote) + "개")
@@ -1539,6 +1560,7 @@
       resolveItemImage: resolveItemImage,
       requestedQuantityFromDetail: requestedQuantityFromDetail,
       quoteListQuantity: quoteListQuantity,
+      quoteListMeta: quoteListMeta,
       webBuyerLabel: webBuyerLabel,
     },
   };
