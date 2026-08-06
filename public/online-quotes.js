@@ -456,11 +456,53 @@
     var requested = Number(item.requestedQuantity || item.quantity || 0);
     var draft = props.draft;
     var image = resolveItemImage(item);
-    var cancelled = requested - clampQuantity(draft.preparedQuantity, requested);
+    var prepared = clampQuantity(draft.preparedQuantity, requested);
+    var cancelled = requested - prepared;
     var canWrite = props.online && props.canWrite && !props.finalized;
+    var soldOut = prepared === 0 && draft.cancellationReason === "품절";
+    var partiallyPrepared = prepared > 0 && prepared < requested;
+
+    function setFullyPrepared() {
+      props.onChange("preparedQuantity", requested);
+      props.onChange("cancellationReason", "");
+      props.onChange("cancellationNote", "");
+    }
+
+    function setPartiallyPrepared() {
+      if (partiallyPrepared) {
+        if (!draft.cancellationReason || draft.cancellationReason === "품절") {
+          props.onChange("cancellationReason", "수량 부족");
+        }
+        return;
+      }
+      if (typeof global.prompt !== "function") return;
+      var entered = global.prompt(
+        "준비 가능한 수량을 입력하세요.",
+        String(Math.max(1, requested - 1))
+      );
+      if (entered == null) return;
+      var partialQuantity = clampQuantity(entered, requested);
+      if (partialQuantity <= 0) {
+        setSoldOut();
+        return;
+      }
+      if (partialQuantity >= requested) {
+        setFullyPrepared();
+        return;
+      }
+      props.onChange("preparedQuantity", partialQuantity);
+      props.onChange("cancellationReason", "수량 부족");
+    }
+
+    function setSoldOut() {
+      props.onChange("preparedQuantity", 0);
+      props.onChange("cancellationReason", "품절");
+      props.onChange("cancellationNote", "");
+    }
+
     return h(
       "article",
-      { className: "online-quote-item" },
+      { className: "online-quote-item" + (soldOut ? " online-quote-item--sold-out" : "") },
       h(
         "div",
         { className: "online-quote-item__product" },
@@ -478,7 +520,7 @@
         { className: "online-quote-item__picking" },
         h("div", { className: "online-quote-quantity-summary" },
           h("span", null, "요청 ", h("b", null, requested)),
-          h("span", null, "준비 ", h("b", null, clampQuantity(draft.preparedQuantity, requested))),
+          h("span", null, "준비 ", h("b", null, prepared)),
           h("span", null, "취소 ", h("b", null, cancelled))
         ),
         field(
@@ -488,8 +530,8 @@
             inputMode: "numeric",
             min: 0,
             max: requested,
-            value: draft.preparedQuantity,
-            disabled: !canWrite,
+            value: prepared,
+            disabled: !canWrite || soldOut,
             onChange: function (event) {
               props.onChange("preparedQuantity", clampQuantity(event.target.value, requested));
             },
@@ -503,9 +545,7 @@
             {
               type: "button",
               disabled: !canWrite,
-              onClick: function () {
-                props.onChange("preparedQuantity", requested);
-              },
+              onClick: setFullyPrepared,
             },
             "전부 준비"
           ),
@@ -513,16 +553,26 @@
             "button",
             {
               type: "button",
+              className: partiallyPrepared ? "is-selected" : "",
+              disabled: !canWrite || requested < 2,
+              "aria-pressed": partiallyPrepared,
+              onClick: setPartiallyPrepared,
+            },
+            "부분 준비"
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              className: soldOut ? "is-selected" : "",
               disabled: !canWrite,
-              onClick: function () {
-                props.onChange("preparedQuantity", 0);
-                if (!draft.cancellationReason) props.onChange("cancellationReason", "품절");
-              },
+              "aria-pressed": soldOut,
+              onClick: setSoldOut,
             },
             "품절"
           )
         ),
-        cancelled > 0
+        cancelled > 0 && !soldOut
           ? field(
               "취소 사유",
               h("input", {
@@ -654,8 +704,7 @@
           "← 목록"
         ),
         h("div", null,
-          h("h2", null, quote.quoteNumber || quote.inquiryNumber || "온라인 견적"),
-          h("p", null, webBuyerLabel(quote))
+          h("h2", null, quote.quoteNumber || quote.inquiryNumber || "온라인 견적")
         )
       ),
       !props.online

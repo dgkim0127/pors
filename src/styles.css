@@ -5088,9 +5088,9 @@ body.native-printing .receipt-preview-page .receipt {
   resize: vertical;
 }
 
-.online-quote-quick-actions {
+.online-quote-item__quick-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -5101,6 +5101,27 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-item button:last-child {
   color: var(--accent-strong);
+}
+
+.online-quote-item__quick-actions button.is-selected {
+  border-color: #d5d0c6;
+  background: #e8e5df;
+  color: #827b70;
+}
+
+.online-quote-item--sold-out {
+  border-color: #d5d0c6;
+  background: #f4f2ee;
+}
+
+.online-quote-item--sold-out .online-quote-item__product,
+.online-quote-item--sold-out .online-quote-quantity-summary,
+.online-quote-item--sold-out .online-quote-field {
+  opacity: 0.58;
+}
+
+.online-quote-item--sold-out .online-quote-item__product img {
+  filter: grayscale(1);
 }
 
 .online-quote-mapping {
@@ -5376,7 +5397,7 @@ body.native-printing .receipt-preview-page .receipt {
 }
 
 @media (max-width: 380px) {
-  .online-quote-quick-actions,
+  .online-quote-item__quick-actions,
   .online-quote-action-bar {
     grid-template-columns: minmax(0, 1fr);
   }

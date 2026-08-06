@@ -159,8 +159,12 @@ assert.match(source, /"aria-label": "새로고침"/);
 assert.match(source, /className: "online-quotes-toolbar"/);
 assert.match(source, /online-quote-list-row__chevron/);
 assert.match(source, /online-quote-list-row__summary/);
+assert.match(source, /"부분 준비"/);
+assert.match(source, /준비 가능한 수량을 입력하세요\./);
+assert.match(source, /online-quote-item--sold-out/);
 assert.doesNotMatch(source, /h\("small", null, quote\.inquiryNumber/);
 assert.doesNotMatch(source, /className: "online-quote-status" }, statusLabel\(quote\)/);
+assert.doesNotMatch(source, /h\("p", null, webBuyerLabel\(quote\)\)/);
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(optionPairs({ selectedOptions: [{ groupLabel: "color", valueLabel: "gold" }, { groupName: "size", valueName: "6mm" }] }))),
