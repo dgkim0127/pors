@@ -167,12 +167,25 @@ assert.deepEqual(
   [{ label: "color", value: "gold" }, { label: "size", value: "6mm" }],
 );
 assert.deepEqual(
+  JSON.parse(JSON.stringify(optionPairs({ selectedOptions: [], color: "gold", size: "6mm", barLength: "8mm" }))),
+  [{ label: "색상", value: "gold" }, { label: "바 길이", value: "8mm" }, { label: "바 길이/사이즈", value: "6mm" }],
+);
+assert.deepEqual(
   JSON.parse(JSON.stringify(groupPriceBands({ lines: [{ quantity: 2, unitPrice: 1800 }, { preparedQuantity: 3, unitPrice: 1800 }, { quantity: 1, unitPrice: 2200 }] }))),
   [{ quantity: 5, unitPrice: 1800 }, { quantity: 1, unitPrice: 2200 }],
 );
 assert.equal(
   resolveItemImage({ imageSet: { gallery: [{ urls: { thumb: "https://example.test/thumb.webp" } }] } }),
   "https://example.test/thumb.webp",
+);
+assert.equal(
+  resolveItemImage({ productImage: { url: "https://example.test/product.webp" } }),
+  "https://example.test/product.webp",
+);
+windowObject.PORS_NOBLESSE_API_BASE_URL = "https://noblesse.web.app/api";
+assert.equal(
+  resolveItemImage({ productImage: { url: "/storage/product.webp" } }),
+  "https://noblesse.web.app/storage/product.webp",
 );
 
 console.log("online quote workspace tests passed");

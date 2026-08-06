@@ -48,8 +48,9 @@
 
   function optionPairs(item) {
     var selected = item && item.selectedOptions;
+    var pairs = [];
     if (Array.isArray(selected)) {
-      return selected
+      pairs = selected
         .map(function (entry) {
           return {
             label:
@@ -69,10 +70,8 @@
         .filter(function (entry) {
           return entry.value !== "";
         });
-    }
-
-    if (selected && typeof selected === "object") {
-      return Object.keys(selected).map(function (key) {
+    } else if (selected && typeof selected === "object") {
+      pairs = Object.keys(selected).map(function (key) {
         var value = selected[key];
         return {
           label: key,
@@ -83,13 +82,21 @@
         };
       });
     }
+    if (pairs.length) return pairs;
 
     var legacy = [];
     if (item && (item.selectedColor || item.color)) {
       legacy.push({ label: "색상", value: item.selectedColor || item.color });
     }
+    var barLength = item && (item.barLength || item.bar_length || item.length);
+    if (barLength) {
+      legacy.push({ label: "바 길이", value: barLength });
+    }
     if (item && (item.selectedSize || item.size)) {
-      legacy.push({ label: "사이즈", value: item.selectedSize || item.size });
+      var size = item.selectedSize || item.size;
+      if (String(size) !== String(barLength || "")) {
+        legacy.push({ label: "바 길이/사이즈", value: size });
+      }
     }
     return legacy;
   }
@@ -130,13 +137,26 @@
     return Number.isFinite(itemCount) && itemCount >= 0 ? itemCount : 0;
   }
 
+  function resolveItemImageUrl(value) {
+    var imageUrl = String(value || "").trim();
+    if (!imageUrl || imageUrl.charAt(0) !== "/") return imageUrl;
+
+    var configuredApiBase = String(
+      global.PORS_NOBLESSE_API_BASE_URL || ""
+    ).trim();
+    var originMatch = configuredApiBase.match(/^https?:\/\/[^/]+/i);
+    return originMatch ? originMatch[0] + imageUrl : imageUrl;
+  }
+
   function resolveItemImage(item) {
     var imageSet = (item && item.imageSet) || {};
+    var productImage = (item && item.productImage) || {};
     var gallery =
       imageSet.gallery && imageSet.gallery.length ? imageSet.gallery[0] : null;
     var galleryUrls = (gallery && gallery.urls) || {};
-    return (
+    return resolveItemImageUrl(
       (item && (item.imageUrl || item.productImageUrl)) ||
+      productImage.url ||
       (gallery &&
         (gallery.thumb ||
           gallery.card ||
