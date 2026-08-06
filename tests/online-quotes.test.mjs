@@ -61,6 +61,8 @@ const {
   draftFromQuote,
   groupPriceBands,
   optionPairs,
+  pricingFromDetail,
+  publicationIsCurrent,
   quoteItemsFromDetail,
   quoteReceiptLines,
   quoteListQuantity,
@@ -132,6 +134,40 @@ assert.deepEqual(JSON.parse(JSON.stringify(draftFromQuote(topLevelItemsDetail)))
     { cancellationNote: "", cancellationReason: "", id: "line-3", itemNote: "", preparationMarked: false, preparedQuantity: 1 },
   ],
 });
+
+const finalizedDetail = {
+  quote: { id: "quote-finalized" },
+  items: [{
+    id: "line-ready",
+    requestedQuantity: 2,
+    confirmedQuantity: 2,
+    fulfillmentStatus: "ready",
+  }],
+  pos: {
+    state: {
+      finalizedAt: "2026-08-06T01:00:00.000Z",
+      finalizedSnapshot: { pricing: { totalAmount: 3960, lines: [] } },
+    },
+  },
+};
+assert.equal(draftFromQuote(finalizedDetail).items[0].preparationMarked, true);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(pricingFromDetail(finalizedDetail))),
+  { totalAmount: 3960, lines: [] },
+);
+assert.equal(publicationIsCurrent(finalizedDetail), false);
+assert.equal(publicationIsCurrent({
+  pos: { state: {
+    finalizedAt: "2026-08-06T01:00:00.000Z",
+    publishedAt: "2026-08-06T01:01:00.000Z",
+  } },
+}), true);
+assert.equal(publicationIsCurrent({
+  pos: { state: {
+    finalizedAt: "2026-08-06T01:02:00.000Z",
+    publishedAt: "2026-08-06T01:01:00.000Z",
+  } },
+}), false);
 
 draft.items[0].preparedQuantity = 99;
 draft.items[1].cancellationReason = "out of stock";
@@ -213,6 +249,10 @@ assert.match(source, /online-quote-quantity-stepper/);
 assert.match(source, /function previewPreparation\(itemId, patch\)/);
 assert.match(source, /writeQuote\("preview", "\/price-preview", "", nextDraft\)/);
 assert.match(source, /onPreparationSelected: previewPreparation/);
+assert.match(source, /var canWrite = props\.online && props\.canWrite && !props\.busy/);
+assert.match(source, /\(finalized && !props\.dirty\)/);
+assert.match(source, /props\.dirty \|\| !finalized \|\| published/);
+assert.match(source, /props\.dirty \? "견적 다시 확정" : "견적 확정됨"/);
 assert.doesNotMatch(source, /가격 다시 계산/);
 assert.match(source, /준비 수량 1개 줄이기/);
 assert.match(source, /준비 수량 1개 늘리기/);

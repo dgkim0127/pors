@@ -180,16 +180,45 @@
           item.confirmedQuantity == null
             ? requested
             : Number(item.confirmedQuantity);
+        var fulfillmentStatus = String(item.fulfillmentStatus || "").toLowerCase();
         return {
           id: item.id,
           preparedQuantity: clampQuantity(prepared, requested),
-          preparationMarked: false,
+          preparationMarked:
+            prepared > 0 &&
+            (fulfillmentStatus === "ready" || fulfillmentStatus === "partial"),
           cancellationReason: item.cancellationReason || "",
           cancellationNote: item.cancellationNote || "",
           itemNote: item.itemNote || "",
         };
       }),
     };
+  }
+
+  function pricingFromDetail(detail) {
+    var pos = (detail && detail.pos) || {};
+    var state = pos.state || {};
+    return (
+      pos.pricing ||
+      (state.finalizedSnapshot && state.finalizedSnapshot.pricing) ||
+      state.lastPreview ||
+      (state.publishedSnapshot && state.publishedSnapshot.pricing) ||
+      null
+    );
+  }
+
+  function publicationIsCurrent(detail) {
+    var pos = (detail && detail.pos) || {};
+    var state = pos.state || {};
+    var finalizedAt = pos.finalizedAt || state.finalizedAt || "";
+    var publishedAt = pos.publishedAt || state.publishedAt || "";
+    if (!finalizedAt || !publishedAt) return false;
+    var finalizedTime = Date.parse(finalizedAt);
+    var publishedTime = Date.parse(publishedAt);
+    if (Number.isFinite(finalizedTime) && Number.isFinite(publishedTime)) {
+      return publishedTime >= finalizedTime;
+    }
+    return String(publishedAt) >= String(finalizedAt);
   }
 
   function requestText(value) {
@@ -617,7 +646,7 @@
     var image = resolveItemImage(item);
     var prepared = clampQuantity(draft.preparedQuantity, requested);
     var cancelled = requested - prepared;
-    var canWrite = props.online && props.canWrite && !props.finalized && !props.busy;
+    var canWrite = props.online && props.canWrite && !props.busy;
     var soldOut = prepared === 0 && draft.cancellationReason === "품절";
     var partiallyPrepared = prepared > 0 && prepared < requested;
 
@@ -916,11 +945,7 @@
         (detail.pos.finalizedAt ||
           (detail.pos.state && detail.pos.state.finalizedAt))
     );
-    var published = Boolean(
-      detail.pos &&
-        (detail.pos.publishedAt ||
-          (detail.pos.state && detail.pos.state.publishedAt))
-    );
+    var published = publicationIsCurrent(detail);
 
     return h(
       "section",
@@ -980,7 +1005,7 @@
           "button",
           {
             type: "button",
-            disabled: !props.online || !props.canWrite || props.busy || finalized || !features().picking,
+            disabled: !props.online || !props.canWrite || props.busy || (finalized && !props.dirty) || !features().picking,
             onClick: props.onSavePicking,
           },
           "임시 저장"
@@ -990,17 +1015,19 @@
           {
             type: "button",
             className: "online-quotes-primary",
-            disabled: !props.online || !props.canWrite || props.busy || finalized || !features().finalize,
+            disabled: !props.online || !props.canWrite || props.busy || (finalized && !props.dirty) || !features().finalize,
             onClick: props.onFinalize,
           },
-          finalized ? "견적 확정됨" : "견적 확정"
+          finalized
+            ? props.dirty ? "견적 다시 확정" : "견적 확정됨"
+            : "견적 확정"
         ),
         h(
           "button",
           {
             type: "button",
             className: "online-quotes-primary",
-            disabled: !props.online || !props.canWrite || props.busy || !finalized || published || !features().publish,
+            disabled: !props.online || !props.canWrite || props.busy || props.dirty || !finalized || published || !features().publish,
             onClick: props.onPublish,
           },
           published ? "고객 공개됨" : "고객에게 견적 공개"
@@ -1044,6 +1071,9 @@
     var pricingHook = React.useState(null);
     var pricing = pricingHook[0];
     var setPricing = pricingHook[1];
+    var dirtyHook = React.useState(false);
+    var draftDirty = dirtyHook[0];
+    var setDraftDirty = dirtyHook[1];
     var busyHook = React.useState(false);
     var busy = busyHook[0];
     var setBusy = busyHook[1];
@@ -1105,7 +1135,8 @@
       if (!response) throw new Error("오프라인에 저장된 상세 견적이 없습니다.");
       setDetail(response);
       setDraft(draftFromQuote(response));
-      setPricing(response.pos && response.pos.pricing);
+      setPricing(pricingFromDetail(response));
+      setDraftDirty(false);
       writeCache(CACHE_DETAIL_PREFIX + quoteId, response);
       return response;
     }
@@ -1123,6 +1154,7 @@
     }
 
     function updateItem(itemId, fieldName, value) {
+      setDraftDirty(true);
       setDraft(function (current) {
         return Object.assign({}, current, {
           items: current.items.map(function (item) {
@@ -1164,7 +1196,10 @@
       });
       setDraft(nextDraft);
       var nextPricing =
-        (response.pos && response.pos.pricing) || response.pricing || pricing;
+        (response.pos && response.pos.pricing) ||
+        response.pricing ||
+        pricingFromDetail(nextDetail) ||
+        pricing;
       setPricing(nextPricing);
       writeCache(CACHE_DETAIL_PREFIX + (nextDetail.quote || nextDetail).id, nextDetail);
     }
@@ -1190,6 +1225,7 @@
           }
         );
         applyWriteResponse(response, draftToWrite);
+        if (action !== "preview") setDraftDirty(false);
         if (action === "finalize" || action === "publish") await loadQuotes();
         return true;
       } catch (writeError) {
@@ -1217,6 +1253,7 @@
         }),
       });
       setDraft(nextDraft);
+      setDraftDirty(true);
       writeQuote("preview", "/price-preview", "", nextDraft);
     }
 
@@ -1257,6 +1294,7 @@
         detail: detail,
         draft: draft,
         pricing: pricing || {},
+        dirty: draftDirty,
         online: online,
         busy: busy,
         error: error,
@@ -1264,6 +1302,7 @@
         onBack: function () {
           setDetail(null);
           setDraft(null);
+          setDraftDirty(false);
           setError("");
         },
         onItemChange: updateItem,
@@ -1301,6 +1340,8 @@
       buildReceiptLinkPayload: buildReceiptLinkPayload,
       apiErrorMessage: apiErrorMessage,
       draftFromQuote: draftFromQuote,
+      pricingFromDetail: pricingFromDetail,
+      publicationIsCurrent: publicationIsCurrent,
       quoteWriteMetadata: quoteWriteMetadata,
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,
