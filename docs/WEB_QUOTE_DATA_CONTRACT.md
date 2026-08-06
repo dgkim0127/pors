@@ -13,7 +13,7 @@
 - `PORS_NOBLESSE_API_BASE_URL` is the Noblesse API base URL.
 - `PORS_NOBLESSE_READ_TOKEN` enables read-only devices to read the web-quote list and detail.
 - `PORS_NOBLESSE_WRITE_TOKEN` enables prepare, price preview, internal finalization, customer publication, and manual receipt linking without a separate Noblesse/Firebase login.
-- The web-quote screen is available without the normal PORS administrator login; normal calculation, management, history, and settlement screens keep their existing login boundary.
+- The managed PORS app opens calculation, management, history, settlement, and web-quote screens without an in-app login step.
 - A managed write device may use its write token for quote reads too, so it does not need a second credential.
 - The write token is a managed-device credential: it is accepted only by `/api/pors/quotes/*`, cannot call Noblesse admin or Buyer routes, and must be provisioned only to managed PORS devices. Rotate it when a device is lost or replaced.
 - Firebase service accounts, PostgreSQL credentials, and private server keys must never be embedded in the app.

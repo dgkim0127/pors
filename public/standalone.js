@@ -27,11 +27,8 @@
   var root = ReactDOM.createRoot(rootElement);
   var STORE_KEY = "piercing-pos-state-v5";
   var DATA_VERSION = 23;
-  var AUTH_KEY = "piercing-pos-auth-v1";
-  var LOGIN_LOCK_KEY = "piercing-pos-login-lock-v1";
   var RECENT_CUSTOMERS_KEY = "piercing-pos-recent-customers-v1";
   var MANUAL_CUSTOMER_ID = "customer_manual";
-  var AUTH_TTL_MS = 12 * 60 * 60 * 1000;
   var MAX_TEXT_LENGTH = 40;
   var MAX_PRICE = 99999999;
   var MAX_QUANTITY = 999;
@@ -629,45 +626,6 @@
         try { unsubscribe(); } catch (error) {}
       });
     };
-  }
-
-  function readAuth() {
-    localStorage.removeItem(AUTH_KEY);
-    return false;
-  }
-
-  function readSettlementAuth() {
-    return false;
-  }
-
-  function writeAuth(settlement) {
-    localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem("piercing-pos-authorized");
-  }
-
-  function loginLocked() {
-    try {
-      var lock = JSON.parse(localStorage.getItem(LOGIN_LOCK_KEY) || "null");
-      if (!lock) return false;
-      return lock.until && Date.now() < lock.until;
-    } catch (error) {
-      localStorage.removeItem(LOGIN_LOCK_KEY);
-      return false;
-    }
-  }
-
-  function recordLoginFailure() {
-    var lock = {};
-    try {
-      lock = JSON.parse(localStorage.getItem(LOGIN_LOCK_KEY) || "{}");
-    } catch (error) {
-      lock = {};
-    }
-    var attempts = (lock.attempts || 0) + 1;
-    localStorage.setItem(LOGIN_LOCK_KEY, JSON.stringify({
-      attempts: attempts,
-      until: attempts >= 5 ? Date.now() + 5 * 60 * 1000 : 0
-    }));
   }
 
   function id(prefix) {
@@ -1446,14 +1404,7 @@
         return stamped;
       });
     }
-    var authHook = React.useState(readAuth());
-    var authorized = authHook[0], setAuthorized = authHook[1];
-    var loginPromptHook = React.useState(false);
-    var loginPromptOpen = loginPromptHook[0], setLoginPromptOpen = loginPromptHook[1];
-    var settlementHook = React.useState(readSettlementAuth());
-    var settlementAccess = settlementHook[0], setSettlementAccess = settlementHook[1];
-    var keyHook = React.useState("");
-    var adminKey = keyHook[0], setAdminKey = keyHook[1];
+    var settlementAccess = true;
     var tabHook = React.useState("sale");
     var activeTab = tabHook[0], setActiveTab = tabHook[1];
     var menuHook = React.useState(false);
@@ -1751,25 +1702,6 @@
     function clearGroupPurchase() {
       setGroupPurchaseEntries([]);
       setDeduction({ amount: 0, taxIncluded: false });
-    }
-
-    function login(event) {
-      event.preventDefault();
-      if (loginLocked()) {
-        alert("로그인 시도가 많습니다. 5분 뒤 다시 시도해 주세요.");
-        return;
-      }
-      var configuredKey = window.PIERCE_ADMIN_KEY || state.store.adminKey;
-      var settlementLogin = adminKey === "1226";
-      if (!settlementLogin && adminKey !== configuredKey && adminKey !== state.store.adminKey) {
-        recordLoginFailure();
-        alert("관리자키가 맞지 않습니다. 기본키는 0000입니다.");
-        return;
-      }
-      writeAuth(settlementLogin);
-      setAuthorized(true);
-      setSettlementAccess(settlementLogin);
-      setLoginPromptOpen(false);
     }
 
     function addItem(item, forceNewLine, override) {
@@ -2184,41 +2116,6 @@
       selectCustomerWithVat(newCustomer.id);
       setManualCustomerName("");
     }
-
-    if (!authorized && !loginPromptOpen) return h(React.Fragment, null,
-      h("div", { className: "app-shell guest-online-quote-shell" },
-        h("header", { className: "topbar" },
-          h("div", { className: "brand-row" }, h("strong", null, state.store.name)),
-          h("button", { className: "ghost small", type: "button", onClick: function () { setLoginPromptOpen(true); } }, "PORS 로그인")
-        ),
-        window.PorsOnlineQuotes
-          ? h(window.PorsOnlineQuotes.Screen, {
-              online: online,
-              sales: state.sales,
-              onPrintReceipt: registerAndPrintOnlineQuote
-            })
-          : h("main", { className: "online-quotes-unavailable" },
-              h("p", null, "웹 견적 화면을 불러오지 못했습니다.")
-            )
-      ),
-      printSale && h(PrintSheet, { sale: printSale, store: state.store, onClose: function () { setPrintSale(null); } }),
-      saveNotice ? h("div", { className: "save-toast " + saveNotice.type, role: "status" }, saveNotice.message) : null
-    );
-
-    if (!authorized) return h("main", { className: "login-screen" },
-      h("section", { className: "login-card" },
-        h("div", { className: "brand-mark" }, "P"),
-        h("h1", null, "피어싱 계산"),
-        h("p", null, "관리자키를 입력하면 계산, 품목관리, 영수증 출력을 바로 사용할 수 있습니다."),
-        h("form", { onSubmit: login },
-          h("label", null, "관리자키"),
-          h("input", { value: adminKey, onChange: function (e) { setAdminKey(e.target.value); }, placeholder: "0000", type: "password", autoFocus: true }),
-          h("button", { className: "primary", type: "submit" }, "시작하기")
-        ),
-        h("button", { className: "ghost", type: "button", onClick: function () { setLoginPromptOpen(false); } }, "웹 견적으로 돌아가기"),
-        h("small", null, "파일 직접 실행 모드")
-      )
-    );
 
     return h(React.Fragment, null,
       h("div", { className: "app-shell" },
