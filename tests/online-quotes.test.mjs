@@ -34,6 +34,7 @@ const context = vm.createContext({
 });
 const source = fs.readFileSync(new URL("../src/online-quotes.js", import.meta.url), "utf8");
 const standaloneSource = fs.readFileSync(new URL("../src/standalone.js", import.meta.url), "utf8");
+const stylesSource = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const viteConfigSource = fs.readFileSync(new URL("../vite.config.js", import.meta.url), "utf8");
 vm.runInContext(source, context);
 
@@ -53,6 +54,7 @@ assert.doesNotMatch(source, /임시 저장/);
 assert.doesNotMatch(source, /onSavePicking/);
 assert.match(source, /await loadQuoteDetail\(quote\.id\)/);
 assert.match(source, /disabled: !props\.online \|\| !props\.canWrite/);
+assert.match(stylesSource, /@media \(max-width: 430px\)/);
 assert.match(viteConfigSource, /PORS_NOBLESSE_READ_TOKEN/);
 assert.match(viteConfigSource, /PORS_NOBLESSE_WRITE_TOKEN/);
 assert.match(viteConfigSource, /pors-device-config\.js/);

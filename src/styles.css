@@ -5635,17 +5635,31 @@ body.native-printing .receipt-preview-page .receipt {
   }
 }
 
-@media (max-width: 380px) {
+@media (max-width: 430px) {
   .online-quote-item__quick-actions,
   .online-quote-action-bar {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .online-quote-action-bar button:last-child {
-    grid-column: 1;
+    grid-column: auto;
+  }
+
+  .online-quote-item__quick-actions button,
+  .online-quote-action-bar button {
+    min-height: 44px;
+    padding: 0 4px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .online-quote-action-bar {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .online-quote-detail {
-    padding-bottom: calc(206px + var(--safe-bottom));
+    padding-bottom: calc(82px + var(--safe-bottom));
   }
 }
