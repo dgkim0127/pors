@@ -1191,15 +1191,6 @@
           "button",
           {
             type: "button",
-            disabled: !props.online || !props.canWrite || props.busy || (finalized && !props.dirty) || !features().picking,
-            onClick: props.onSavePicking,
-          },
-          "임시 저장"
-        ),
-        h(
-          "button",
-          {
-            type: "button",
             className: "online-quotes-primary",
             disabled: !props.online || !props.canWrite || props.busy || (finalized && !props.dirty) || !features().finalize,
             onClick: props.onFinalize,
@@ -1510,9 +1501,6 @@
         },
         onItemChange: updateItem,
         onPreparationSelected: previewPreparation,
-        onSavePicking: function () {
-          writeQuote("picking", "/picking");
-        },
         onFinalize: function () {
           writeQuote(
             "finalize",

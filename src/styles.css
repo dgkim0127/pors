@@ -5606,7 +5606,7 @@ body.native-printing .receipt-preview-page .receipt {
   }
 
   .online-quote-action-bar button:last-child {
-    grid-column: auto;
+    grid-column: 1 / -1;
   }
 }
 

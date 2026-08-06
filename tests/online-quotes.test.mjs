@@ -49,6 +49,8 @@ assert.doesNotMatch(source, /getNamedAuth/);
 assert.doesNotMatch(source, /\/admin\/pos\/quotes/);
 assert.doesNotMatch(source, /작업 로그인/);
 assert.doesNotMatch(source, /online-quotes-eyebrow" }, statusLabel/);
+assert.doesNotMatch(source, /임시 저장/);
+assert.doesNotMatch(source, /onSavePicking/);
 assert.match(source, /await loadQuoteDetail\(quote\.id\)/);
 assert.match(source, /disabled: !props\.online \|\| !props\.canWrite/);
 assert.match(viteConfigSource, /PORS_NOBLESSE_READ_TOKEN/);
