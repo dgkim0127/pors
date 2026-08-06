@@ -5148,25 +5148,92 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-price-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.5fr);
-  gap: 18px;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
 }
 
-.online-quote-price-summary dl {
+.online-quote-receipt__store {
+  padding: 14px 16px 10px;
+  border-bottom: 2px dotted #8d877c;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.online-quote-receipt__lines {
+  padding: 0 16px;
+}
+
+.online-quote-receipt__columns,
+.online-quote-receipt__line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 76px 86px;
+  gap: 8px;
+  align-items: center;
+}
+
+.online-quote-receipt__columns {
+  min-height: 34px;
+  border-bottom: 1px solid #d9d4ca;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.online-quote-receipt__columns span:not(:first-child),
+.online-quote-receipt__line span,
+.online-quote-receipt__line b {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.online-quote-receipt__line {
+  min-height: 42px;
+  border-bottom: 1px dotted #d9d4ca;
+  font-size: 13px;
+}
+
+.online-quote-receipt__line strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-quote-receipt__line span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.online-quote-receipt__empty {
+  margin: 0;
+  padding: 22px 0;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.online-quote-receipt__totals {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px 16px;
-  margin: 0;
+  margin: 0 16px;
+  padding: 14px 0 16px;
+  border-top: 2px solid #27251f;
 }
 
-.online-quote-price-summary dt {
+.online-quote-receipt__totals dt {
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
 }
 
-.online-quote-price-summary dd {
+.online-quote-receipt__totals dd {
   margin: 0;
   text-align: right;
   font-weight: 900;
@@ -5174,10 +5241,31 @@ body.native-printing .receipt-preview-page .receipt {
 }
 
 .online-quote-price-summary__total {
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid #27251f;
   color: var(--accent-strong);
   font-size: 20px;
+}
+
+@media (max-width: 480px) {
+  .online-quote-receipt__columns,
+  .online-quote-receipt__line {
+    grid-template-columns: minmax(0, 1fr) 40px 64px 72px;
+    gap: 5px;
+  }
+
+  .online-quote-receipt__lines {
+    padding: 0 12px;
+  }
+
+  .online-quote-receipt__totals {
+    margin: 0 12px;
+  }
+
+  .online-quote-receipt__line {
+    font-size: 12px;
+  }
 }
 
 .online-quote-extra summary {

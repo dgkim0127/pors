@@ -61,6 +61,7 @@ const {
   groupPriceBands,
   optionPairs,
   quoteItemsFromDetail,
+  quoteReceiptLines,
   quoteListQuantity,
   requestedQuantityFromDetail,
   resolveItemImage,
@@ -178,6 +179,15 @@ assert.deepEqual(
   JSON.parse(JSON.stringify(groupPriceBands({ lines: [{ quantity: 2, unitPrice: 1800 }, { preparedQuantity: 3, unitPrice: 1800 }, { quantity: 1, unitPrice: 2200 }] }))),
   [{ quantity: 5, unitPrice: 1800 }, { quantity: 1, unitPrice: 2200 }],
 );
+assert.deepEqual(
+  JSON.parse(JSON.stringify(quoteReceiptLines(
+    { lines: [{ itemId: "line-1", preparedQuantity: 2, unitPrice: 1800, lineSubtotal: 3600 }] },
+    [{ id: "line-1", productName: "Clover barbell" }],
+  ))),
+  [{ id: "line-1", name: "Clover barbell", quantity: 2, unitPrice: 1800, subtotal: 3600 }],
+);
+assert.doesNotMatch(source, /웹 견적 · 할인 0% 고정/);
+assert.match(source, /online-quote-receipt__store/);
 assert.equal(
   resolveItemImage({ imageSet: { gallery: [{ urls: { thumb: "https://example.test/thumb.webp" } }] } }),
   "https://example.test/thumb.webp",

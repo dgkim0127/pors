@@ -264,6 +264,46 @@
       });
   }
 
+  function quoteReceiptLines(pricing, items) {
+    var itemsById = {};
+    (items || []).forEach(function (item) {
+      if (item && item.id != null) itemsById[String(item.id)] = item;
+    });
+
+    var pricedLines = (pricing && pricing.lines) || [];
+    if (pricedLines.length) {
+      return pricedLines
+        .filter(function (line) {
+          return Number(line.preparedQuantity || line.quantity || 0) > 0;
+        })
+        .map(function (line, index) {
+          var item = itemsById[String(line.itemId || line.id)] || {};
+          var quantity = Number(line.preparedQuantity || line.quantity || 0);
+          var unitPrice = asMoney(line.unitPrice || line.baseUnitPrice);
+          return {
+            id: String(line.itemId || line.id || index),
+            name: item.productName || item.name || item.productCode || item.code || "상품",
+            quantity: quantity,
+            unitPrice: unitPrice,
+            subtotal:
+              line.lineSubtotal == null
+                ? asMoney(unitPrice * quantity)
+                : asMoney(line.lineSubtotal),
+          };
+        });
+    }
+
+    return groupPriceBands(pricing).map(function (band, index) {
+      return {
+        id: "band:" + index + ":" + band.unitPrice,
+        name: "상품",
+        quantity: Number(band.quantity || 0),
+        unitPrice: asMoney(band.unitPrice),
+        subtotal: asMoney(band.unitPrice * band.quantity),
+      };
+    });
+  }
+
   function apiBase() {
     var configured = String(global.PORS_NOBLESSE_API_BASE_URL || "").trim();
     if (!configured) {
@@ -591,31 +631,47 @@
 
   function PriceSummary(props) {
     var pricing = props.pricing || {};
+    var receiptLines = quoteReceiptLines(pricing, props.items);
     return h(
       "aside",
       { className: "online-quote-price-summary" },
-      h("div", null,
-        h("strong", null, props.customerLabel || "웹 거래처"),
-        h("span", null, "웹 견적 · 할인 0% 고정")
+      h(
+        "header",
+        { className: "online-quote-receipt__store" },
+        h("strong", null, props.storeName || "매장")
       ),
       h(
-        "ul",
-        null,
-        groupPriceBands(pricing).map(function (band) {
-          return h(
-            "li",
-            { key: band.unitPrice },
-            h("span", null, formatMoney(band.unitPrice) + " × " + band.quantity + "개"),
-            h("strong", null, formatMoney(band.unitPrice * band.quantity))
-          );
-        })
+        "div",
+        { className: "online-quote-receipt__lines" },
+        h(
+          "div",
+          { className: "online-quote-receipt__columns" },
+          h("span", null, "품목"),
+          h("span", null, "수량"),
+          h("span", null, "단가"),
+          h("span", null, "금액")
+        ),
+        receiptLines.length
+          ? receiptLines.map(function (line) {
+              return h(
+                "div",
+                { key: line.id, className: "online-quote-receipt__line" },
+                h("strong", null, line.name),
+                h("span", null, line.quantity + "개"),
+                h("span", null, formatMoney(line.unitPrice)),
+                h("b", null, formatMoney(line.subtotal))
+              );
+            })
+          : h("p", { className: "online-quote-receipt__empty" }, "준비 수량을 계산하면 표시됩니다.")
       ),
-      h("dl", null,
-        h("div", null, h("dt", null, "소계"), h("dd", null, formatMoney(pricing.subtotal))),
-        h("div", null, h("dt", null, "공급가"), h("dd", null, formatMoney(pricing.supplyAmount))),
+      h(
+        "dl",
+        { className: "online-quote-receipt__totals" },
+        h("div", null, h("dt", null, "상품 합계"), h("dd", null, formatMoney(pricing.subtotal))),
+        h("div", null, h("dt", null, "공급가액"), h("dd", null, formatMoney(pricing.supplyAmount))),
         h("div", null, h("dt", null, "VAT"), h("dd", null, formatMoney(pricing.vatAmount))),
         h("div", { className: "online-quote-price-summary__total" },
-          h("dt", null, "최종 합계"),
+          h("dt", null, "총액"),
           h("dd", null, formatMoney(pricing.totalAmount))
         )
       )
@@ -736,7 +792,8 @@
       ),
       h(PriceSummary, {
         pricing: props.pricing,
-        customerLabel: webBuyerLabel(quote),
+        items: quoteItems,
+        storeName: quote.companyName || quote.buyerCompany || "매장",
       }),
       h(
         "div",
@@ -1054,6 +1111,7 @@
       draftFromQuote: draftFromQuote,
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,
+      quoteReceiptLines: quoteReceiptLines,
       quoteItemsFromDetail: quoteItemsFromDetail,
       resolveItemImage: resolveItemImage,
       requestedQuantityFromDetail: requestedQuantityFromDetail,
