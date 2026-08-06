@@ -192,6 +192,74 @@
     };
   }
 
+  function requestText(value) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function defaultValidUntil() {
+    var date = new Date();
+    date.setDate(date.getDate() + 7);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function validUntilForApi(value) {
+    var normalized = requestText(value);
+    return /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+      ? normalized
+      : defaultValidUntil();
+  }
+
+  function documentLocaleForApi(value) {
+    var normalized = requestText(value);
+    return ["kr", "en", "jp", "zh-TW"].includes(normalized)
+      ? normalized
+      : "kr";
+  }
+
+  function cancellationForApi(reason, note) {
+    var normalizedReason = requestText(reason);
+    var normalizedNote = requestText(note);
+    var reasonByLabel = {
+      "품절": "out_of_stock",
+      "수량 부족": "quantity_shortage",
+      "품질 문제": "quality_issue",
+      "단종": "discontinued",
+      "기타": "other",
+    };
+    var validReasons = [
+      "out_of_stock",
+      "quantity_shortage",
+      "quality_issue",
+      "discontinued",
+      "other",
+    ];
+    if (!normalizedReason) {
+      return { reason: "", note: normalizedNote };
+    }
+    if (reasonByLabel[normalizedReason]) {
+      return { reason: reasonByLabel[normalizedReason], note: normalizedNote };
+    }
+    if (validReasons.includes(normalizedReason)) {
+      return { reason: normalizedReason, note: normalizedNote };
+    }
+    return {
+      reason: "other",
+      note: normalizedNote || normalizedReason,
+    };
+  }
+
+  function quoteWriteMetadata(detail) {
+    var quote = detail && detail.quote ? detail.quote : detail || {};
+    return {
+      leadTime: requestText(quote.leadTime),
+      shippingNote: requestText(quote.shippingNote),
+      validUntil: validUntilForApi(quote.validUntil),
+      documentLocale: documentLocaleForApi(quote.documentLocale),
+      customerNote: requestText(quote.customerNote),
+      adminMemo: requestText(quote.adminMemo),
+    };
+  }
+
   function buildWritePayload(detail, draft, action) {
     var quoteItems = quoteItemsFromDetail(detail) || [];
     var draftById = {};
@@ -203,25 +271,29 @@
       var requested = Number(item.requestedQuantity || item.quantity || 0);
       var source = draftById[item.id] || {};
       var prepared = clampQuantity(source.preparedQuantity, requested);
-      if (prepared < requested && !String(source.cancellationReason || "").trim()) {
+      var cancellation = cancellationForApi(
+        source.cancellationReason,
+        source.cancellationNote
+      );
+      if (prepared < requested && !cancellation.reason) {
         throw new Error("준비하지 못한 수량에는 취소 사유가 필요합니다.");
       }
       return {
         id: item.id,
         preparedQuantity: prepared,
-        cancellationReason: String(source.cancellationReason || "").trim(),
-        cancellationNote: String(source.cancellationNote || "").trim(),
-        itemNote: String(source.itemNote || "").trim(),
+        cancellationReason: cancellation.reason,
+        cancellationNote: cancellation.note,
+        itemNote: requestText(source.itemNote),
       };
     });
 
-    return {
+    return Object.assign({
       expectedVersion:
         Number(detail && detail.pos && detail.pos.state && detail.pos.state.version) ||
         1,
       idempotencyKey: makeIdempotencyKey(action),
       items: items,
-    };
+    }, quoteWriteMetadata(detail));
   }
 
   function buildReceiptLinkPayload(detail, sale) {
@@ -1229,6 +1301,7 @@
       buildReceiptLinkPayload: buildReceiptLinkPayload,
       apiErrorMessage: apiErrorMessage,
       draftFromQuote: draftFromQuote,
+      quoteWriteMetadata: quoteWriteMetadata,
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,
       quoteReceiptLines: quoteReceiptLines,

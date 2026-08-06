@@ -64,6 +64,7 @@ const {
   quoteItemsFromDetail,
   quoteReceiptLines,
   quoteListQuantity,
+  quoteWriteMetadata,
   requestedQuantityFromDetail,
   resolveItemImage,
   webBuyerLabel,
@@ -76,6 +77,25 @@ assert.equal(
 assert.equal(
   apiErrorMessage({ error: { code: "INTERNAL_ERROR" } }, "작업에 실패했습니다."),
   "작업에 실패했습니다.",
+);
+
+assert.deepEqual(
+  JSON.parse(JSON.stringify(quoteWriteMetadata({ quote: {
+    leadTime: { unexpected: true },
+    shippingNote: null,
+    validUntil: { unexpected: true },
+    documentLocale: { unexpected: true },
+    customerNote: ["unexpected"],
+    adminMemo: 1,
+  } }))),
+  {
+    leadTime: "",
+    shippingNote: "",
+    validUntil: quoteWriteMetadata({}).validUntil,
+    documentLocale: "kr",
+    customerNote: "",
+    adminMemo: "",
+  },
 );
 
 const detail = {
@@ -120,6 +140,8 @@ assert.equal(payload.expectedVersion, 4);
 assert.equal(payload.idempotencyKey, "save:test-id");
 assert.equal(payload.items[0].preparedQuantity, 3);
 assert.equal(payload.items[1].preparedQuantity, 1);
+assert.equal(payload.documentLocale, "kr");
+assert.match(payload.validUntil, /^\d{4}-\d{2}-\d{2}$/);
 assert.equal("deductionAmount" in payload, false);
 assert.equal("overrideUnitPrice" in payload.items[0], false);
 assert.equal("overrideReason" in payload.items[1], false);
@@ -127,6 +149,15 @@ assert.equal("overrideReason" in payload.items[1], false);
 const missingCancellation = draftFromQuote(detail);
 missingCancellation.items[0].preparedQuantity = 2;
 assert.throws(() => buildWritePayload(detail, missingCancellation, "save"));
+
+const partialDraft = draftFromQuote(detail);
+partialDraft.items[0].preparedQuantity = 2;
+partialDraft.items[0].cancellationReason = "수량 부족";
+partialDraft.items[1].preparedQuantity = 2;
+assert.equal(
+  buildWritePayload(detail, partialDraft, "save").items[0].cancellationReason,
+  "quantity_shortage",
+);
 
 const receiptPayload = buildReceiptLinkPayload(detail, {
   id: "sale-1",
