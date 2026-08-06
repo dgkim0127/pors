@@ -183,6 +183,7 @@
         return {
           id: item.id,
           preparedQuantity: clampQuantity(prepared, requested),
+          preparationMarked: false,
           cancellationReason: item.cancellationReason || "",
           cancellationNote: item.cancellationNote || "",
           itemNote: item.itemNote || "",
@@ -477,7 +478,6 @@
   function OptionList(props) {
     var pairs = optionPairs(props.item);
     var quantity = Number(props.requestedQuantity);
-    var preparedQuantity = clampQuantity(props.preparedQuantity, quantity);
     if (Number.isFinite(quantity) && quantity >= 0) {
       var quantityIndex = pairs.length;
       for (var index = 0; index < pairs.length; index += 1) {
@@ -489,12 +489,7 @@
       pairs.splice(quantityIndex, 0, { label: "갯수", value: quantity + "개" });
     }
     if (!pairs.length) return null;
-    var preparationStatus =
-      quantity > 0 && preparedQuantity >= quantity
-        ? { className: "is-ready", label: "준비 완료" }
-        : preparedQuantity > 0
-          ? { className: "is-partial", label: "부분 준비" }
-          : { className: "is-pending", label: "준비 필요" };
+    var preparationMarked = Boolean(props.preparationMarked);
     return h(
       "dl",
       { className: "online-quote-options" },
@@ -508,9 +503,13 @@
       }),
       h(
         "div",
-        { className: "online-quote-options__status " + preparationStatus.className },
-        h("i", { "aria-hidden": "true" }),
-        preparationStatus.label
+        {
+          className: "online-quote-options__status " +
+            (preparationMarked ? "is-active" : "is-inactive"),
+          "aria-label": preparationMarked ? "준비 선택됨" : "준비 미선택",
+        },
+        h("span", null, "준비"),
+        h("i", { "aria-hidden": "true" })
       )
     );
   }
@@ -528,12 +527,14 @@
 
     function setFullyPrepared() {
       props.onChange("preparedQuantity", requested);
+      props.onChange("preparationMarked", true);
       props.onChange("cancellationReason", "");
       props.onChange("cancellationNote", "");
     }
 
     function setPartiallyPrepared() {
       if (partiallyPrepared) {
+        props.onChange("preparationMarked", true);
         if (!draft.cancellationReason || draft.cancellationReason === "품절") {
           props.onChange("cancellationReason", "수량 부족");
         }
@@ -555,11 +556,13 @@
         return;
       }
       props.onChange("preparedQuantity", partialQuantity);
+      props.onChange("preparationMarked", true);
       props.onChange("cancellationReason", "수량 부족");
     }
 
     function setSoldOut() {
       props.onChange("preparedQuantity", 0);
+      props.onChange("preparationMarked", false);
       props.onChange("cancellationReason", "품절");
       props.onChange("cancellationNote", "");
     }
@@ -579,7 +582,7 @@
           h(OptionList, {
             item: item,
             requestedQuantity: requested,
-            preparedQuantity: prepared,
+            preparationMarked: draft.preparationMarked,
           })
         )
       ),
@@ -601,6 +604,7 @@
                 disabled: !canWrite || soldOut || prepared <= 0,
                 onClick: function () {
                   props.onChange("preparedQuantity", prepared - 1);
+                  props.onChange("preparationMarked", false);
                 },
               },
               "−"
@@ -614,6 +618,7 @@
               disabled: !canWrite || soldOut,
               onChange: function (event) {
                 props.onChange("preparedQuantity", clampQuantity(event.target.value, requested));
+                props.onChange("preparationMarked", false);
               },
             }),
             h(
@@ -624,6 +629,7 @@
                 disabled: !canWrite || soldOut || prepared >= requested,
                 onClick: function () {
                   props.onChange("preparedQuantity", prepared + 1);
+                  props.onChange("preparationMarked", false);
                 },
               },
               "+"
@@ -1036,7 +1042,17 @@
             pos: Object.assign({}, detail.pos || {}, responsePos),
           });
       setDetail(nextDetail);
-      setDraft(draftFromQuote(nextDetail));
+      var preparationMarks = {};
+      (draft.items || []).forEach(function (item) {
+        preparationMarks[item.id] = Boolean(item.preparationMarked);
+      });
+      var nextDraft = draftFromQuote(nextDetail);
+      nextDraft.items = nextDraft.items.map(function (item) {
+        return Object.assign({}, item, {
+          preparationMarked: Boolean(preparationMarks[item.id]),
+        });
+      });
+      setDraft(nextDraft);
       var nextPricing =
         (response.pos && response.pos.pricing) || response.pricing || pricing;
       setPricing(nextPricing);

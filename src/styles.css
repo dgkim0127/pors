@@ -5033,9 +5033,11 @@ body.native-printing .receipt-preview-page .receipt {
 }
 
 .online-quote-options__status {
-  border: 1px solid #d5d0c6;
-  border-radius: 999px;
-  padding: 3px 8px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 26px;
+  padding: 0 3px;
   color: #827b70;
   font-size: 12px;
   font-weight: 900;
@@ -5044,27 +5046,24 @@ body.native-printing .receipt-preview-page .receipt {
 }
 
 .online-quote-options__status i {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
   border-radius: 999px;
-  background: currentColor;
+  background: #c8c2b7;
 }
 
-.online-quote-options__status.is-ready {
-  border-color: #b8dfaa;
-  background: #edf9e8;
+.online-quote-options__status.is-active {
   color: #5d9d48;
 }
 
-.online-quote-options__status.is-partial {
-  border-color: #ead2a5;
-  background: #fff7e7;
-  color: #9a7028;
+.online-quote-options__status.is-active i {
+  background: #79bc5d;
+  box-shadow: 0 0 0 3px #edf9e8;
 }
 
-.online-quote-options__status.is-pending {
-  background: #f2f0eb;
+.online-quote-options__status.is-inactive {
+  color: #8f887d;
 }
 
 .online-quote-item__picking,

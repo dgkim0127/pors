@@ -83,8 +83,8 @@ const detail = {
 const draft = draftFromQuote(detail);
 assert.deepEqual(JSON.parse(JSON.stringify(draft)), {
   items: [
-    { cancellationNote: "", cancellationReason: "", id: "line-1", itemNote: "", preparedQuantity: 3 },
-    { cancellationNote: "", cancellationReason: "", id: "line-2", itemNote: "", preparedQuantity: 1 },
+    { cancellationNote: "", cancellationReason: "", id: "line-1", itemNote: "", preparationMarked: false, preparedQuantity: 3 },
+    { cancellationNote: "", cancellationReason: "", id: "line-2", itemNote: "", preparationMarked: false, preparedQuantity: 1 },
   ],
 });
 
@@ -99,7 +99,7 @@ assert.deepEqual(
 );
 assert.deepEqual(JSON.parse(JSON.stringify(draftFromQuote(topLevelItemsDetail))), {
   items: [
-    { cancellationNote: "", cancellationReason: "", id: "line-3", itemNote: "", preparedQuantity: 1 },
+    { cancellationNote: "", cancellationReason: "", id: "line-3", itemNote: "", preparationMarked: false, preparedQuantity: 1 },
   ],
 });
 
@@ -166,7 +166,8 @@ assert.match(source, /online-quote-item--sold-out/);
 assert.match(source, /label: "갯수", value: quantity \+ "개"/);
 assert.doesNotMatch(source, /h\("span", null, "요청 ", h\("b", null, requested\)\)/);
 assert.doesNotMatch(source, /online-quote-quantity-summary/);
-assert.match(source, /preparationStatus\.label/);
+assert.match(source, /preparationMarked \? "is-active" : "is-inactive"/);
+assert.match(source, /h\("span", null, "준비"\)/);
 assert.match(source, /online-quote-quantity-stepper/);
 assert.match(source, /준비 수량 1개 줄이기/);
 assert.match(source, /준비 수량 1개 늘리기/);
