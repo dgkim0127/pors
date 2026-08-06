@@ -586,19 +586,49 @@
       h(
         "div",
         { className: "online-quote-item__picking" },
-        field(
-          "준비 수량",
-          h("input", {
-            type: "number",
-            inputMode: "numeric",
-            min: 0,
-            max: requested,
-            value: prepared,
-            disabled: !canWrite || soldOut,
-            onChange: function (event) {
-              props.onChange("preparedQuantity", clampQuantity(event.target.value, requested));
-            },
-          })
+        h(
+          "div",
+          { className: "online-quote-prepared-control" },
+          h("span", null, "준비 수량"),
+          h(
+            "div",
+            { className: "online-quote-quantity-stepper" },
+            h(
+              "button",
+              {
+                type: "button",
+                "aria-label": "준비 수량 1개 줄이기",
+                disabled: !canWrite || soldOut || prepared <= 0,
+                onClick: function () {
+                  props.onChange("preparedQuantity", prepared - 1);
+                },
+              },
+              "−"
+            ),
+            h("input", {
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              "aria-label": "준비 수량",
+              value: prepared,
+              disabled: !canWrite || soldOut,
+              onChange: function (event) {
+                props.onChange("preparedQuantity", clampQuantity(event.target.value, requested));
+              },
+            }),
+            h(
+              "button",
+              {
+                type: "button",
+                "aria-label": "준비 수량 1개 늘리기",
+                disabled: !canWrite || soldOut || prepared >= requested,
+                onClick: function () {
+                  props.onChange("preparedQuantity", prepared + 1);
+                },
+              },
+              "+"
+            )
+          )
         ),
         h(
           "div",
