@@ -521,23 +521,38 @@
     var image = resolveItemImage(item);
     var prepared = clampQuantity(draft.preparedQuantity, requested);
     var cancelled = requested - prepared;
-    var canWrite = props.online && props.canWrite && !props.finalized;
+    var canWrite = props.online && props.canWrite && !props.finalized && !props.busy;
     var soldOut = prepared === 0 && draft.cancellationReason === "품절";
     var partiallyPrepared = prepared > 0 && prepared < requested;
 
+    function selectPreparation(patch) {
+      if (typeof props.onPreparationSelected === "function") {
+        props.onPreparationSelected(patch);
+        return;
+      }
+      Object.keys(patch).forEach(function (fieldName) {
+        props.onChange(fieldName, patch[fieldName]);
+      });
+    }
+
     function setFullyPrepared() {
-      props.onChange("preparedQuantity", requested);
-      props.onChange("preparationMarked", true);
-      props.onChange("cancellationReason", "");
-      props.onChange("cancellationNote", "");
+      selectPreparation({
+        preparedQuantity: requested,
+        preparationMarked: true,
+        cancellationReason: "",
+        cancellationNote: "",
+      });
     }
 
     function setPartiallyPrepared() {
       if (partiallyPrepared) {
-        props.onChange("preparationMarked", true);
-        if (!draft.cancellationReason || draft.cancellationReason === "품절") {
-          props.onChange("cancellationReason", "수량 부족");
-        }
+        selectPreparation({
+          preparationMarked: true,
+          cancellationReason:
+            !draft.cancellationReason || draft.cancellationReason === "품절"
+              ? "수량 부족"
+              : draft.cancellationReason,
+        });
         return;
       }
       if (typeof global.prompt !== "function") return;
@@ -555,16 +570,20 @@
         setFullyPrepared();
         return;
       }
-      props.onChange("preparedQuantity", partialQuantity);
-      props.onChange("preparationMarked", true);
-      props.onChange("cancellationReason", "수량 부족");
+      selectPreparation({
+        preparedQuantity: partialQuantity,
+        preparationMarked: true,
+        cancellationReason: "수량 부족",
+      });
     }
 
     function setSoldOut() {
-      props.onChange("preparedQuantity", 0);
-      props.onChange("preparationMarked", false);
-      props.onChange("cancellationReason", "품절");
-      props.onChange("cancellationNote", "");
+      selectPreparation({
+        preparedQuantity: 0,
+        preparationMarked: false,
+        cancellationReason: "품절",
+        cancellationNote: "",
+      });
     }
 
     return h(
@@ -842,9 +861,13 @@
             },
             online: props.online,
             canWrite: props.canWrite,
+            busy: props.busy,
             finalized: finalized,
             onChange: function (fieldName, value) {
               props.onItemChange(item.id, fieldName, value);
+            },
+            onPreparationSelected: function (patch) {
+              props.onPreparationSelected(item.id, patch);
             },
           });
         })
@@ -1028,7 +1051,7 @@
       });
     }
 
-    function applyWriteResponse(response) {
+    function applyWriteResponse(response, sourceDraft) {
       var responsePos = Object.assign({}, response.pos || {});
       if (response.state) responsePos.state = response.state;
       if (response.customer) responsePos.customer = response.customer;
@@ -1042,15 +1065,15 @@
             pos: Object.assign({}, detail.pos || {}, responsePos),
           });
       setDetail(nextDetail);
-      var preparationMarks = {};
-      (draft.items || []).forEach(function (item) {
-        preparationMarks[item.id] = Boolean(item.preparationMarked);
+      var sourceItems = {};
+      ((sourceDraft || draft).items || []).forEach(function (item) {
+        sourceItems[item.id] = item;
       });
       var nextDraft = draftFromQuote(nextDetail);
       nextDraft.items = nextDraft.items.map(function (item) {
-        return Object.assign({}, item, {
-          preparationMarked: Boolean(preparationMarks[item.id]),
-        });
+        return sourceItems[item.id]
+          ? Object.assign({}, item, sourceItems[item.id])
+          : item;
       });
       setDraft(nextDraft);
       var nextPricing =
@@ -1059,27 +1082,29 @@
       writeCache(CACHE_DETAIL_PREFIX + (nextDetail.quote || nextDetail).id, nextDetail);
     }
 
-    async function writeQuote(action, path, confirmMessage) {
+    async function writeQuote(action, path, confirmMessage, draftOverride) {
       if (action === "finalize") {
         confirmMessage = "준비 수량 기준으로 내부 견적을 확정할까요? 이 단계에서는 고객에게 공개되지 않습니다.";
       }
       if (action === "publish") {
         confirmMessage = "확정된 최신 견적서와 PDF를 고객에게 공개할까요?";
       }
-      if (confirmMessage && !global.confirm(confirmMessage)) return;
+      if (confirmMessage && !global.confirm(confirmMessage)) return false;
       setBusy(true);
       setError("");
       try {
         var quote = detail.quote || detail;
+        var draftToWrite = draftOverride || draft;
         var response = await deviceWriteRequest(
           "/pors/quotes/" + encodeURIComponent(quote.id) + path,
           {
             method: action === "picking" ? "PUT" : "POST",
-            body: buildWritePayload(detail, draft, action),
+            body: buildWritePayload(detail, draftToWrite, action),
           }
         );
-        applyWriteResponse(response);
+        applyWriteResponse(response, draftToWrite);
         if (action === "finalize" || action === "publish") await loadQuotes();
+        return true;
       } catch (writeError) {
         if (writeError.status === 409) {
           try {
@@ -1091,9 +1116,21 @@
         } else {
           setError(writeError.message);
         }
+        return false;
       } finally {
         setBusy(false);
       }
+    }
+
+    function previewPreparation(itemId, patch) {
+      if (!detail || !draft || busy) return;
+      var nextDraft = Object.assign({}, draft, {
+        items: draft.items.map(function (item) {
+          return item.id === itemId ? Object.assign({}, item, patch) : item;
+        }),
+      });
+      setDraft(nextDraft);
+      writeQuote("preview", "/price-preview", "", nextDraft);
     }
 
     async function linkExistingReceipt(sale) {
@@ -1143,6 +1180,7 @@
           setError("");
         },
         onItemChange: updateItem,
+        onPreparationSelected: previewPreparation,
         onSavePicking: function () {
           writeQuote("picking", "/picking");
         },
