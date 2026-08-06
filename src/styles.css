@@ -5591,7 +5591,7 @@ body.native-printing .receipt-preview-page .receipt {
   }
 
   .online-quote-action-bar button:last-child {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 }
 

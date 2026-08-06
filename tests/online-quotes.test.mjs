@@ -33,6 +33,7 @@ const context = vm.createContext({
   window: windowObject,
 });
 const source = fs.readFileSync(new URL("../src/online-quotes.js", import.meta.url), "utf8");
+const standaloneSource = fs.readFileSync(new URL("../src/standalone.js", import.meta.url), "utf8");
 const viteConfigSource = fs.readFileSync(new URL("../vite.config.js", import.meta.url), "utf8");
 vm.runInContext(source, context);
 
@@ -56,6 +57,7 @@ assert.match(viteConfigSource, /pors-device-config\.js/);
 
 const {
   apiErrorMessage,
+  buildPrintableReceipt,
   buildReceiptLinkPayload,
   buildWritePayload,
   draftFromQuote,
@@ -216,6 +218,38 @@ assert.deepEqual(JSON.parse(JSON.stringify(receiptPayload.receiptSnapshot)), {
 });
 assert.throws(() => buildReceiptLinkPayload(detail, null));
 
+const printableReceipt = buildPrintableReceipt({
+  quote: { id: "quote-print", companyName: "Sample shop" },
+  items: [{ id: "line-print", productName: "Clover", requestedQuantity: 2 }],
+  pos: { state: { finalizedAt: "2026-08-06T02:00:00.000Z" } },
+}, {
+  subtotal: 3600,
+  supplyAmount: 3600,
+  vatAmount: 360,
+  totalAmount: 3960,
+  lines: [{ itemId: "line-print", preparedQuantity: 2, unitPrice: 1800, lineSubtotal: 3600 }],
+});
+assert.deepEqual(JSON.parse(JSON.stringify(printableReceipt)), {
+  id: "online_quote_quote-print",
+  createdAt: "2026-08-06T02:00:00.000Z",
+  customerId: null,
+  customerName: "Sample shop",
+  writerName: "웹 견적",
+  customerNote: "",
+  lines: [{ id: "line-print", name: "Clover", quantity: 2, price: 1800 }],
+  deduction: { amount: 0, taxIncluded: false },
+  totals: {
+    subtotal: 3600,
+    discount: 0,
+    shippingFee: 0,
+    supply: 3600,
+    vat: 360,
+    total: 3960,
+    deduction: 0,
+    deductionTaxIncluded: false,
+  },
+});
+
 assert.equal(webBuyerLabel({ companyName: "Sample shop" }), "웹-Sample shop");
 assert.equal(webBuyerLabel({}), "웹-웹 거래처");
 assert.equal(
@@ -253,6 +287,9 @@ assert.match(source, /var canWrite = props\.online && props\.canWrite && !props\
 assert.match(source, /\(finalized && !props\.dirty\)/);
 assert.match(source, /props\.dirty \|\| !finalized \|\| published/);
 assert.match(source, /props\.dirty \? "견적 다시 확정" : "견적 확정됨"/);
+assert.match(source, /"영수증 출력"/);
+assert.match(source, /buildPrintableReceipt\(detail, pricing \|\| \{\}\)/);
+assert.match(standaloneSource, /onPrintReceipt: setPrintSale/);
 assert.doesNotMatch(source, /가격 다시 계산/);
 assert.match(source, /준비 수량 1개 줄이기/);
 assert.match(source, /준비 수량 1개 늘리기/);

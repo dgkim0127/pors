@@ -406,6 +406,43 @@
     });
   }
 
+  function buildPrintableReceipt(detail, pricing) {
+    var quote = (detail && (detail.quote || detail)) || {};
+    var pos = (detail && detail.pos) || {};
+    var state = pos.state || {};
+    var lines = quoteReceiptLines(
+      pricing,
+      quoteItemsFromDetail(detail)
+    ).map(function (line) {
+      return {
+        id: line.id,
+        name: line.name,
+        quantity: line.quantity,
+        price: line.unitPrice,
+      };
+    });
+    return {
+      id: "online_quote_" + String(quote.id || quote.quoteNumber || Date.now()),
+      createdAt: pos.finalizedAt || state.finalizedAt || new Date().toISOString(),
+      customerId: null,
+      customerName: quote.companyName || quote.buyerCompany || "웹 견적",
+      writerName: "웹 견적",
+      customerNote: "",
+      lines: lines,
+      deduction: { amount: 0, taxIncluded: false },
+      totals: {
+        subtotal: asMoney(pricing && pricing.subtotal),
+        discount: 0,
+        shippingFee: 0,
+        supply: asMoney(pricing && pricing.supplyAmount),
+        vat: asMoney(pricing && pricing.vatAmount),
+        total: asMoney(pricing && pricing.totalAmount),
+        deduction: 0,
+        deductionTaxIncluded: false,
+      },
+    };
+  }
+
   function apiBase() {
     var configured = String(global.PORS_NOBLESSE_API_BASE_URL || "").trim();
     if (!configured) {
@@ -1026,6 +1063,23 @@
           "button",
           {
             type: "button",
+            className: "online-quotes-secondary",
+            disabled:
+              !props.online ||
+              !props.canWrite ||
+              props.busy ||
+              props.dirty ||
+              !finalized ||
+              !quoteReceiptLines(props.pricing, quoteItems).length ||
+              typeof props.onPrintReceipt !== "function",
+            onClick: props.onPrintReceipt,
+          },
+          "영수증 출력"
+        ),
+        h(
+          "button",
+          {
+            type: "button",
             className: "online-quotes-primary",
             disabled: !props.online || !props.canWrite || props.busy || props.dirty || !finalized || published || !features().publish,
             onClick: props.onPublish,
@@ -1317,6 +1371,11 @@
             "이 견적을 확정하고 고객에게 최종 가격과 새 문서를 공개할까요? 매출·주문·결제·재고는 생성되지 않습니다."
           );
         },
+        onPrintReceipt: function () {
+          if (typeof props.onPrintReceipt === "function") {
+            props.onPrintReceipt(buildPrintableReceipt(detail, pricing || {}));
+          }
+        },
         onPublish: function () {
           writeQuote("publish", "/publish");
         },
@@ -1338,6 +1397,7 @@
     core: {
       buildWritePayload: buildWritePayload,
       buildReceiptLinkPayload: buildReceiptLinkPayload,
+      buildPrintableReceipt: buildPrintableReceipt,
       apiErrorMessage: apiErrorMessage,
       draftFromQuote: draftFromQuote,
       pricingFromDetail: pricingFromDetail,

@@ -2187,7 +2187,8 @@
           window.PorsOnlineQuotes
             ? h(window.PorsOnlineQuotes.Screen, {
                 online: online,
-                sales: state.sales
+                sales: state.sales,
+                onPrintReceipt: setPrintSale
               })
             : h("main", { className: "online-quotes-unavailable" },
                 h("p", null, "웹 견적 화면을 불러오지 못했습니다.")
