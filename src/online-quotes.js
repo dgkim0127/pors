@@ -340,6 +340,30 @@
     }
   }
 
+  function apiErrorMessage(payload, fallback) {
+    if (typeof payload === "string") {
+      return payload.trim() || fallback;
+    }
+    if (!payload || typeof payload !== "object") return fallback;
+
+    var candidates = [
+      payload.message,
+      payload.error,
+      payload.detail,
+      payload.reason,
+    ];
+    for (var index = 0; index < candidates.length; index += 1) {
+      var candidate = candidates[index];
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+      if (candidate && typeof candidate === "object" && typeof candidate.message === "string" && candidate.message.trim()) {
+        return candidate.message.trim();
+      }
+    }
+    return fallback;
+  }
+
   async function readRequest(path) {
     var response = await global.fetch(apiBase() + path, {
       method: "GET",
@@ -356,7 +380,7 @@
     }
     if (!response.ok) {
       var error = new Error(
-        payload.error || payload.message || "웹 견적을 불러오지 못했습니다."
+        apiErrorMessage(payload, "웹 견적을 불러오지 못했습니다.")
       );
       error.status = response.status;
       error.payload = payload;
@@ -385,7 +409,7 @@
     }
     if (!response.ok) {
       var error = new Error(
-        payload.error || payload.message || "웹 견적 작업에 실패했습니다."
+        apiErrorMessage(payload, "웹 견적 작업에 실패했습니다.")
       );
       error.status = response.status;
       error.payload = payload;
@@ -1203,6 +1227,7 @@
     core: {
       buildWritePayload: buildWritePayload,
       buildReceiptLinkPayload: buildReceiptLinkPayload,
+      apiErrorMessage: apiErrorMessage,
       draftFromQuote: draftFromQuote,
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,

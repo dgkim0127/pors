@@ -55,6 +55,7 @@ assert.match(viteConfigSource, /PORS_NOBLESSE_WRITE_TOKEN/);
 assert.match(viteConfigSource, /pors-device-config\.js/);
 
 const {
+  apiErrorMessage,
   buildReceiptLinkPayload,
   buildWritePayload,
   draftFromQuote,
@@ -67,6 +68,15 @@ const {
   resolveItemImage,
   webBuyerLabel,
 } = windowObject.PorsOnlineQuotes.core;
+
+assert.equal(
+  apiErrorMessage({ error: { code: "VALIDATION_ERROR", message: "내부 견적을 먼저 확정해 주세요." } }, "작업에 실패했습니다."),
+  "내부 견적을 먼저 확정해 주세요.",
+);
+assert.equal(
+  apiErrorMessage({ error: { code: "INTERNAL_ERROR" } }, "작업에 실패했습니다."),
+  "작업에 실패했습니다.",
+);
 
 const detail = {
   quote: {
