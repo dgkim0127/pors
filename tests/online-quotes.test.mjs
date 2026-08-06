@@ -68,6 +68,7 @@ const {
   buildReceiptLinkPayload,
   buildWritePayload,
   draftFromQuote,
+  formatReceiptMoney,
   groupPriceBands,
   optionPairs,
   pricingFromDetail,
@@ -91,6 +92,7 @@ assert.equal(
   apiErrorMessage({ error: { code: "INTERNAL_ERROR" } }, "작업에 실패했습니다."),
   "작업에 실패했습니다.",
 );
+assert.equal(formatReceiptMoney(1800), "₩1,800");
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(quoteWriteMetadata({ quote: {
@@ -449,6 +451,10 @@ assert.deepEqual(
 );
 assert.doesNotMatch(source, /웹 견적 · 할인 0% 고정/);
 assert.match(source, /online-quote-receipt__store/);
+assert.match(source, /h\("span", null, "번호"\)/);
+assert.match(source, /h\("dt", null, "토탈 원가"\)/);
+assert.match(source, /h\("dt", null, "총금액"\)/);
+assert.match(stylesSource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
 assert.equal(
   resolveItemImage({ imageSet: { gallery: [{ urls: { thumb: "https://example.test/thumb.webp" } }] } }),
   "https://example.test/thumb.webp",

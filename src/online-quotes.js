@@ -21,6 +21,10 @@
     return asMoney(value).toLocaleString("ko-KR") + "원";
   }
 
+  function formatReceiptMoney(value) {
+    return "₩" + asMoney(value).toLocaleString("ko-KR");
+  }
+
   function makeIdempotencyKey(prefix) {
     var randomPart =
       global.crypto && typeof global.crypto.randomUUID === "function"
@@ -1092,6 +1096,9 @@
       props.productMappings,
       props.categories
     );
+    var totalQuantity = receiptLines.reduce(function (sum, line) {
+      return sum + Number(line.quantity || 0);
+    }, 0);
     return h(
       "aside",
       { className: "online-quote-price-summary" },
@@ -1106,20 +1113,22 @@
         h(
           "div",
           { className: "online-quote-receipt__columns" },
+          h("span", null, "번호"),
           h("span", null, "품목"),
           h("span", null, "수량"),
           h("span", null, "단가"),
           h("span", null, "금액")
         ),
         receiptLines.length
-          ? receiptLines.map(function (line) {
+          ? receiptLines.map(function (line, index) {
               return h(
                 "div",
                 { key: line.id, className: "online-quote-receipt__line" },
+                h("span", { className: "online-quote-receipt__number" }, index + 1),
                 h("strong", null, line.name),
-                h("span", null, line.quantity + "개"),
-                h("span", null, formatMoney(line.unitPrice)),
-                h("b", null, formatMoney(line.subtotal))
+                h("span", null, line.quantity),
+                h("span", null, formatReceiptMoney(line.unitPrice)),
+                h("b", null, formatReceiptMoney(line.subtotal))
               );
             })
           : h("p", { className: "online-quote-receipt__empty" }, "준비 수량을 계산하면 표시됩니다.")
@@ -1127,12 +1136,13 @@
       h(
         "dl",
         { className: "online-quote-receipt__totals" },
-        h("div", null, h("dt", null, "상품 합계"), h("dd", null, formatMoney(pricing.subtotal))),
-        h("div", null, h("dt", null, "공급가액"), h("dd", null, formatMoney(pricing.supplyAmount))),
-        h("div", null, h("dt", null, "VAT"), h("dd", null, formatMoney(pricing.vatAmount))),
+        h("div", null, h("dt", null, "총수"), h("dd", null, totalQuantity + "개")),
+        h("div", null, h("dt", null, "토탈 원가"), h("dd", null, formatReceiptMoney(pricing.subtotal))),
+        h("div", null, h("dt", null, "공급가"), h("dd", null, formatReceiptMoney(pricing.supplyAmount))),
+        h("div", null, h("dt", null, "세금"), h("dd", null, formatReceiptMoney(pricing.vatAmount))),
         h("div", { className: "online-quote-price-summary__total" },
-          h("dt", null, "총액"),
-          h("dd", null, formatMoney(pricing.totalAmount))
+          h("dt", null, "총금액"),
+          h("dd", null, formatReceiptMoney(pricing.totalAmount))
         )
       )
     );
@@ -1548,6 +1558,7 @@
       upsertOnlineQuoteSale: upsertOnlineQuoteSale,
       apiErrorMessage: apiErrorMessage,
       draftFromQuote: draftFromQuote,
+      formatReceiptMoney: formatReceiptMoney,
       pricingFromDetail: pricingFromDetail,
       publicationIsCurrent: publicationIsCurrent,
       quoteWriteMetadata: quoteWriteMetadata,
