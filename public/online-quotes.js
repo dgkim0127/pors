@@ -476,13 +476,24 @@
 
   function OptionList(props) {
     var pairs = optionPairs(props.item);
+    var quantity = Number(props.requestedQuantity);
+    if (Number.isFinite(quantity) && quantity >= 0) {
+      var quantityIndex = pairs.length;
+      for (var index = 0; index < pairs.length; index += 1) {
+        if (pairs[index].label === "색상") {
+          quantityIndex = index + 1;
+          break;
+        }
+      }
+      pairs.splice(quantityIndex, 0, { label: "갯수", value: quantity + "개" });
+    }
     if (!pairs.length) return null;
     return h(
       "dl",
       { className: "online-quote-options" },
       pairs.map(function (pair, index) {
         return h(
-          React.Fragment,
+          "div",
           { key: pair.label + ":" + pair.value + ":" + index },
           h("dt", null, pair.label),
           h("dd", null, pair.value)
@@ -552,14 +563,13 @@
         h("div", null,
           h("strong", null, item.productName || item.name || "상품"),
           h("code", null, item.productCode || item.code || ""),
-          h(OptionList, { item: item })
+          h(OptionList, { item: item, requestedQuantity: requested })
         )
       ),
       h(
         "div",
         { className: "online-quote-item__picking" },
         h("div", { className: "online-quote-quantity-summary" },
-          h("span", null, "요청 ", h("b", null, requested)),
           h("span", null, "준비 ", h("b", null, prepared)),
           h("span", null, "취소 ", h("b", null, cancelled))
         ),
