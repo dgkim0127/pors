@@ -832,7 +832,11 @@
     var image = resolveItemImage(item);
     var prepared = clampQuantity(draft.preparedQuantity, requested);
     var cancelled = requested - prepared;
-    var canWrite = props.online && props.canWrite && !props.busy;
+    var canWrite =
+      props.online &&
+      props.canWrite &&
+      props.editable !== false &&
+      !props.busy;
     var soldOut = prepared === 0 && draft.cancellationReason === "품절";
     var partiallyPrepared = prepared > 0 && prepared < requested;
 
@@ -1131,6 +1135,7 @@
         (detail.pos.finalizedAt ||
           (detail.pos.state && detail.pos.state.finalizedAt))
     );
+    var editingFinalized = Boolean(props.editingFinalized);
     var published = publicationIsCurrent(detail);
 
     return h(
@@ -1170,6 +1175,7 @@
             canWrite: props.canWrite,
             busy: props.busy,
             finalized: finalized,
+            editable: !finalized || editingFinalized,
             onChange: function (fieldName, value) {
               props.onItemChange(item.id, fieldName, value);
             },
@@ -1192,11 +1198,21 @@
           {
             type: "button",
             className: "online-quotes-primary",
-            disabled: !props.online || !props.canWrite || props.busy || (finalized && !props.dirty) || !features().finalize,
-            onClick: props.onFinalize,
+            disabled:
+              !props.online ||
+              !props.canWrite ||
+              props.busy ||
+              (finalized && editingFinalized && !props.dirty) ||
+              !features().finalize,
+            onClick:
+              finalized && !editingFinalized
+                ? props.onStartEditing
+                : props.onFinalize,
           },
           finalized
-            ? props.dirty ? "견적 다시 확정" : "견적 확정됨"
+            ? editingFinalized
+              ? props.dirty ? "견적 다시 확정" : "수정 중"
+              : "견적 수정"
             : "견적 확정"
         ),
         h(
@@ -1268,6 +1284,9 @@
     var dirtyHook = React.useState(false);
     var draftDirty = dirtyHook[0];
     var setDraftDirty = dirtyHook[1];
+    var editingHook = React.useState(false);
+    var editingFinalized = editingHook[0];
+    var setEditingFinalized = editingHook[1];
     var busyHook = React.useState(false);
     var busy = busyHook[0];
     var setBusy = busyHook[1];
@@ -1331,6 +1350,7 @@
       setDraft(draftFromQuote(response));
       setPricing(pricingFromDetail(response));
       setDraftDirty(false);
+      setEditingFinalized(false);
       writeCache(CACHE_DETAIL_PREFIX + quoteId, response);
       return response;
     }
@@ -1420,6 +1440,7 @@
         );
         applyWriteResponse(response, draftToWrite);
         if (action !== "preview") setDraftDirty(false);
+        if (action === "finalize") setEditingFinalized(false);
         if (action === "finalize" || action === "publish") await loadQuotes();
         return true;
       } catch (writeError) {
@@ -1489,6 +1510,7 @@
         draft: draft,
         pricing: pricing || {},
         dirty: draftDirty,
+        editingFinalized: editingFinalized,
         online: online,
         busy: busy,
         error: error,
@@ -1497,10 +1519,14 @@
           setDetail(null);
           setDraft(null);
           setDraftDirty(false);
+          setEditingFinalized(false);
           setError("");
         },
         onItemChange: updateItem,
         onPreparationSelected: previewPreparation,
+        onStartEditing: function () {
+          setEditingFinalized(true);
+        },
         onFinalize: function () {
           writeQuote(
             "finalize",
