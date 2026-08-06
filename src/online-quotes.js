@@ -838,6 +838,8 @@
       props.editable !== false &&
       !props.busy;
     var soldOut = prepared === 0 && draft.cancellationReason === "품절";
+    var preparationMarked =
+      Boolean(draft.preparationMarked) && prepared > 0 && !soldOut;
     var partiallyPrepared = prepared > 0 && prepared < requested;
 
     function selectPreparation(patch) {
@@ -903,7 +905,15 @@
 
     return h(
       "article",
-      { className: "online-quote-item" + (soldOut ? " online-quote-item--sold-out" : "") },
+      {
+        className:
+          "online-quote-item" +
+          (soldOut
+            ? " online-quote-item--sold-out"
+            : preparationMarked
+              ? " online-quote-item--prepared"
+              : ""),
+      },
       h(
         "div",
         { className: "online-quote-item__product" },
@@ -916,7 +926,7 @@
           h(OptionList, {
             item: item,
             requestedQuantity: requested,
-            preparationMarked: draft.preparationMarked,
+            preparationMarked: preparationMarked,
           })
         )
       ),

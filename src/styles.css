@@ -4967,6 +4967,15 @@ body.native-printing .receipt-preview-page .receipt {
   grid-template-columns: minmax(280px, 1.25fr) minmax(230px, 0.8fr) minmax(260px, 0.9fr);
   gap: 16px;
   padding: 16px;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.online-quote-item--prepared {
+  border-color: #8fce75;
+  background: linear-gradient(135deg, #f8fff5 0, var(--panel) 44%);
+  box-shadow:
+    inset 0 0 0 1px #dff2d7,
+    0 0 0 2px rgba(143, 206, 117, 0.18);
 }
 
 .online-quote-item__product {
@@ -5237,17 +5246,33 @@ body.native-printing .receipt-preview-page .receipt {
 }
 
 .online-quote-item--sold-out {
-  border-color: #d5d0c6;
-  background: #f4f2ee;
+  border-color: #aaa49b;
+  background: #dfdcd6;
+  box-shadow:
+    inset 0 0 0 1px rgba(74, 70, 65, 0.12),
+    inset 0 0 0 999px rgba(47, 51, 49, 0.035);
 }
 
 .online-quote-item--sold-out .online-quote-item__product,
 .online-quote-item--sold-out .online-quote-field {
-  opacity: 0.58;
+  opacity: 0.42;
 }
 
 .online-quote-item--sold-out .online-quote-item__product img {
-  filter: grayscale(1);
+  filter: grayscale(1) brightness(0.78);
+}
+
+.online-quote-item--sold-out .online-quote-quantity-stepper,
+.online-quote-item--sold-out .online-quote-item__quick-actions button {
+  border-color: #b7b1a7;
+  background: #d4d0c9;
+  color: #756f67;
+}
+
+.online-quote-item--sold-out .online-quote-item__quick-actions button.is-selected {
+  border-color: #8f8980;
+  background: #c5c0b8;
+  color: #58534d;
 }
 
 .online-quote-mapping {

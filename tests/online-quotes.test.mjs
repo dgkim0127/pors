@@ -326,6 +326,8 @@ assert.match(source, /online-quote-list-row__summary/);
 assert.match(source, /"부분 준비"/);
 assert.match(source, /준비 가능한 수량을 입력하세요\./);
 assert.match(source, /online-quote-item--sold-out/);
+assert.match(source, /online-quote-item--prepared/);
+assert.match(source, /Boolean\(draft\.preparationMarked\) && prepared > 0 && !soldOut/);
 assert.match(source, /label: "갯수", value: quantity \+ "개"/);
 assert.doesNotMatch(source, /h\("span", null, "요청 ", h\("b", null, requested\)\)/);
 assert.doesNotMatch(source, /online-quote-quantity-summary/);
