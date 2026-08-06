@@ -405,7 +405,38 @@
       });
   }
 
-  function quoteReceiptLines(pricing, items) {
+  function porsReceiptItemName(item, pricedLine, productMappings, categories) {
+    var mappings = productMappings || [];
+    var productId = String((item && item.productId) || "");
+    var posItemId = String((pricedLine && pricedLine.posItemId) || "");
+    var mapping = mappings.find(function (entry) {
+      if (!entry) return false;
+      if (productId && String(entry.productId || "") === productId) return true;
+      return posItemId && String(entry.posItemId || (entry.posItem && entry.posItem.id) || "") === posItemId;
+    });
+    var posItem = (mapping && (mapping.posItem || mapping.item)) || null;
+    var categoryId = String((posItem && posItem.categoryId) || "");
+
+    // Keep the same receipt labels used by the normal PORS calculation flow.
+    if (categoryId === "cat_earring") return "피어싱";
+    if (categoryId === "cat_silver") return "실버";
+    if (posItem && String(posItem.name || "").trim()) {
+      return String(posItem.name).trim();
+    }
+
+    var category = (categories || []).find(function (entry) {
+      return entry && String(entry.id || "") === categoryId;
+    });
+    if (category && String(category.name || "").trim()) {
+      return String(category.name).trim();
+    }
+
+    // Noblesse is a piercing catalog. Never fall back to the long product name
+    // in the compact receipt item column.
+    return "피어싱";
+  }
+
+  function quoteReceiptLines(pricing, items, productMappings, categories) {
     var itemsById = {};
     (items || []).forEach(function (item) {
       if (item && item.id != null) itemsById[String(item.id)] = item;
@@ -423,7 +454,7 @@
           var unitPrice = asMoney(line.unitPrice || line.baseUnitPrice);
           return {
             id: String(line.itemId || line.id || index),
-            name: item.productName || item.name || item.productCode || item.code || "상품",
+            name: porsReceiptItemName(item, line, productMappings, categories),
             quantity: quantity,
             unitPrice: unitPrice,
             subtotal:
@@ -437,7 +468,7 @@
     return groupPriceBands(pricing).map(function (band, index) {
       return {
         id: "band:" + index + ":" + band.unitPrice,
-        name: "상품",
+        name: "피어싱",
         quantity: Number(band.quantity || 0),
         unitPrice: asMoney(band.unitPrice),
         subtotal: asMoney(band.unitPrice * band.quantity),
@@ -445,7 +476,7 @@
     });
   }
 
-  function buildPrintableReceipt(detail, pricing) {
+  function buildPrintableReceipt(detail, pricing, categories) {
     var quote = (detail && (detail.quote || detail)) || {};
     var pos = (detail && detail.pos) || {};
     var state = pos.state || {};
@@ -453,7 +484,9 @@
     var finalizedAt = pos.finalizedAt || state.finalizedAt || new Date().toISOString();
     var lines = quoteReceiptLines(
       pricing,
-      quoteItemsFromDetail(detail)
+      quoteItemsFromDetail(detail),
+      pos.productMappings,
+      categories
     ).map(function (line) {
       return {
         id: line.id,
@@ -1053,7 +1086,12 @@
 
   function PriceSummary(props) {
     var pricing = props.pricing || {};
-    var receiptLines = quoteReceiptLines(pricing, props.items);
+    var receiptLines = quoteReceiptLines(
+      pricing,
+      props.items,
+      props.productMappings,
+      props.categories
+    );
     return h(
       "aside",
       { className: "online-quote-price-summary" },
@@ -1166,6 +1204,8 @@
       h(PriceSummary, {
         pricing: props.pricing,
         items: quoteItems,
+        productMappings: detail.pos && detail.pos.productMappings,
+        categories: props.categories,
         storeName: quote.companyName || quote.buyerCompany || "매장",
       }),
       h(
@@ -1204,7 +1244,12 @@
               props.busy ||
               props.dirty ||
               !finalized ||
-              !quoteReceiptLines(props.pricing, quoteItems).length ||
+              !quoteReceiptLines(
+                props.pricing,
+                quoteItems,
+                detail.pos && detail.pos.productMappings,
+                props.categories
+              ).length ||
               typeof props.onPrintReceipt !== "function",
             onClick: props.onPrintReceipt,
           },
@@ -1447,6 +1492,7 @@
         detail: detail,
         draft: draft,
         pricing: pricing || {},
+        categories: props.categories || [],
         dirty: draftDirty,
         editingFinalized: editingFinalized,
         online: online,
@@ -1473,7 +1519,9 @@
         },
         onPrintReceipt: function () {
           if (typeof props.onPrintReceipt === "function") {
-            props.onPrintReceipt(buildPrintableReceipt(detail, pricing || {}));
+            props.onPrintReceipt(
+              buildPrintableReceipt(detail, pricing || {}, props.categories || [])
+            );
           }
         },
         onPublish: function () {
@@ -1505,6 +1553,7 @@
       quoteWriteMetadata: quoteWriteMetadata,
       groupPriceBands: groupPriceBands,
       optionPairs: optionPairs,
+      porsReceiptItemName: porsReceiptItemName,
       quoteReceiptLines: quoteReceiptLines,
       quoteItemsFromDetail: quoteItemsFromDetail,
       resolveItemImage: resolveItemImage,

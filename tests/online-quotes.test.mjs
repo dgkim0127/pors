@@ -262,8 +262,15 @@ assert.throws(() => buildReceiptLinkPayload(detail, null));
 
 const printableReceipt = buildPrintableReceipt({
   quote: { id: "quote-print", companyName: "Sample shop" },
-  items: [{ id: "line-print", productName: "Clover", requestedQuantity: 2 }],
-  pos: { state: { version: 4, finalizedAt: "2026-08-06T02:00:00.000Z" } },
+  items: [{ id: "line-print", productId: "product-print", productName: "Clover", requestedQuantity: 2 }],
+  pos: {
+    state: { version: 4, finalizedAt: "2026-08-06T02:00:00.000Z" },
+    productMappings: [{
+      productId: "product-print",
+      posItemId: "pors-earring",
+      posItem: { id: "pors-earring", categoryId: "cat_earring", name: "P" },
+    }],
+  },
 }, {
   subtotal: 3600,
   supplyAmount: 3600,
@@ -282,7 +289,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(printableReceipt)), {
   customerName: "Sample shop",
   writerName: "웹 견적",
   customerNote: "",
-  lines: [{ id: "line-print", name: "Clover", quantity: 2, price: 1800 }],
+  lines: [{ id: "line-print", name: "피어싱", quantity: 2, price: 1800 }],
   deduction: { amount: 0, taxIncluded: false },
   totals: {
     subtotal: 3600,
@@ -310,7 +317,7 @@ assert.equal(unchangedReprint.sales.length, 1);
 const revisedReceipt = Object.assign({}, printableReceipt, {
   sourceQuoteVersion: 6,
   sourceQuoteFinalizedAt: "2026-08-06T05:00:00.000Z",
-  lines: [{ id: "line-print", name: "Clover", quantity: 1, price: 1800 }],
+  lines: [{ id: "line-print", name: "피어싱", quantity: 1, price: 1800 }],
   totals: Object.assign({}, printableReceipt.totals, {
     subtotal: 1800,
     supply: 1800,
@@ -385,7 +392,7 @@ assert.match(source, /"견적 수정"/);
 assert.match(source, /"수정 중"/);
 assert.match(source, /"견적 다시 확정"/);
 assert.match(source, /"영수증 출력"/);
-assert.match(source, /buildPrintableReceipt\(detail, pricing \|\| \{\}\)/);
+assert.match(source, /buildPrintableReceipt\(\s*detail,\s*pricing \|\| \{\},\s*props\.categories \|\| \[\]\s*\)/);
 assert.match(standaloneSource, /function registerAndPrintOnlineQuote\(receipt\)/);
 assert.match(standaloneSource, /onPrintReceipt: registerAndPrintOnlineQuote/);
 assert.match(standaloneSource, /upsertSaleDocument\(result\.sale\)/);
@@ -416,10 +423,29 @@ assert.deepEqual(
 );
 assert.deepEqual(
   JSON.parse(JSON.stringify(quoteReceiptLines(
-    { lines: [{ itemId: "line-1", preparedQuantity: 2, unitPrice: 1800, lineSubtotal: 3600 }] },
-    [{ id: "line-1", productName: "Clover barbell" }],
+    {
+      lines: [
+        { itemId: "line-1", posItemId: "pors-silver", preparedQuantity: 2, unitPrice: 1800, lineSubtotal: 3600 },
+        { itemId: "line-2", posItemId: "pors-parts", preparedQuantity: 1, unitPrice: 500, lineSubtotal: 500 },
+        { itemId: "line-3", preparedQuantity: 1, unitPrice: 1000, lineSubtotal: 1000 },
+      ],
+    },
+    [
+      { id: "line-1", productId: "product-silver", productName: "Clover barbell" },
+      { id: "line-2", productId: "product-parts", productName: "Long parts product name" },
+      { id: "line-3", productName: "Unmapped long product name" },
+    ],
+    [
+      { productId: "product-silver", posItemId: "pors-silver", posItem: { id: "pors-silver", categoryId: "cat_silver", name: "S" } },
+      { productId: "product-parts", posItemId: "pors-parts", posItem: { id: "pors-parts", categoryId: "cat_parts", name: "부자재" } },
+    ],
+    [{ id: "cat_parts", name: "부자재" }],
   ))),
-  [{ id: "line-1", name: "Clover barbell", quantity: 2, unitPrice: 1800, subtotal: 3600 }],
+  [
+    { id: "line-1", name: "실버", quantity: 2, unitPrice: 1800, subtotal: 3600 },
+    { id: "line-2", name: "부자재", quantity: 1, unitPrice: 500, subtotal: 500 },
+    { id: "line-3", name: "피어싱", quantity: 1, unitPrice: 1000, subtotal: 1000 },
+  ],
 );
 assert.doesNotMatch(source, /웹 견적 · 할인 0% 고정/);
 assert.match(source, /online-quote-receipt__store/);
