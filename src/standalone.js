@@ -2191,8 +2191,7 @@
           h("label", null, "관리자키"),
           h("input", { value: adminKey, onChange: function (e) { setAdminKey(e.target.value); }, placeholder: "0000", type: "password", autoFocus: true }),
           h("button", { className: "primary", type: "submit" }, "시작하기")
-        ),
-        h("small", null, "파일 직접 실행 모드")
+        )
       )
     );
 

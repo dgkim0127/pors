@@ -340,6 +340,7 @@ assert.match(standaloneSource, /upsertSaleDocument\(result\.sale\)/);
 assert.match(standaloneSource, /var authHook = React\.useState\(readAuth\(\)\)/);
 assert.match(standaloneSource, /if \(!authorized\) return h\("main", \{ className: "login-screen" \}/);
 assert.doesNotMatch(standaloneSource, /PORS 로그인/);
+assert.doesNotMatch(standaloneSource, /파일 직접 실행 모드/);
 assert.doesNotMatch(standaloneSource, /loginPromptOpen/);
 assert.doesNotMatch(standaloneSource, /guest-online-quote-shell/);
 assert.doesNotMatch(source, /가격 다시 계산/);
