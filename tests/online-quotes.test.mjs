@@ -33,27 +33,85 @@ const context = vm.createContext({
   window: windowObject,
 });
 const source = fs.readFileSync(new URL("../src/online-quotes.js", import.meta.url), "utf8");
+const standaloneSource = fs.readFileSync(new URL("../src/standalone.js", import.meta.url), "utf8");
+const stylesSource = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const viteConfigSource = fs.readFileSync(new URL("../vite.config.js", import.meta.url), "utf8");
 vm.runInContext(source, context);
 
 assert.match(source, /readRequest\("\/pors\/quotes"\)/);
 assert.match(source, /X-Pors-Quote-Read-Token/);
+assert.match(source, /var writeToken = String\(global\.PORS_NOBLESSE_WRITE_TOKEN \|\| ""\)\.trim\(\)/);
+assert.match(source, /deviceWriteRequest\(/);
+assert.match(source, /X-Pors-Quote-Write-Token/);
+assert.match(source, /"\/pors\/quotes\/" \+ encodeURIComponent\(quote\.id\) \+ path/);
 assert.match(source, /if \(features\(\)\.read\) loadQuotes\(\)/);
-assert.doesNotMatch(source, /if \(user && features\(\)\.read\) loadQuotes\(\)/);
-assert.match(source, /로그인 없이 조회 중입니다/);
+assert.doesNotMatch(source, /OnlineQuoteLogin/);
+assert.doesNotMatch(source, /getNamedAuth/);
+assert.doesNotMatch(source, /\/admin\/pos\/quotes/);
+assert.doesNotMatch(source, /작업 로그인/);
+assert.doesNotMatch(source, /online-quotes-eyebrow" }, statusLabel/);
+assert.doesNotMatch(source, /임시 저장/);
+assert.doesNotMatch(source, /onSavePicking/);
+assert.doesNotMatch(source, /기존 PORS 영수증 수동 연결/);
+assert.doesNotMatch(source, /ReceiptLinker/);
+assert.doesNotMatch(source, /linkExistingReceipt/);
+assert.match(source, /await loadQuoteDetail\(quote\.id\)/);
 assert.match(source, /disabled: !props\.online \|\| !props\.canWrite/);
+assert.match(stylesSource, /@media \(max-width: 430px\)/);
 assert.match(viteConfigSource, /PORS_NOBLESSE_READ_TOKEN/);
+assert.match(viteConfigSource, /PORS_NOBLESSE_WRITE_TOKEN/);
 assert.match(viteConfigSource, /pors-device-config\.js/);
 
 const {
+  apiErrorMessage,
+  buildPrintableReceipt,
   buildReceiptLinkPayload,
   buildWritePayload,
   draftFromQuote,
+  formatReceiptMoney,
   groupPriceBands,
   optionPairs,
+  pricingFromDetail,
+  publicationIsCurrent,
+  quoteItemsFromDetail,
+  quoteReceiptLines,
+  quoteListMeta,
+  quoteListQuantity,
+  quoteWriteMetadata,
+  requestedQuantityFromDetail,
   resolveItemImage,
+  upsertOnlineQuoteSale,
   webBuyerLabel,
 } = windowObject.PorsOnlineQuotes.core;
+
+assert.equal(
+  apiErrorMessage({ error: { code: "VALIDATION_ERROR", message: "내부 견적을 먼저 확정해 주세요." } }, "작업에 실패했습니다."),
+  "내부 견적을 먼저 확정해 주세요.",
+);
+assert.equal(
+  apiErrorMessage({ error: { code: "INTERNAL_ERROR" } }, "작업에 실패했습니다."),
+  "작업에 실패했습니다.",
+);
+assert.equal(formatReceiptMoney(1800), "₩1,800");
+
+assert.deepEqual(
+  JSON.parse(JSON.stringify(quoteWriteMetadata({ quote: {
+    leadTime: { unexpected: true },
+    shippingNote: null,
+    validUntil: { unexpected: true },
+    documentLocale: { unexpected: true },
+    customerNote: ["unexpected"],
+    adminMemo: 1,
+  } }))),
+  {
+    leadTime: "",
+    shippingNote: "",
+    validUntil: quoteWriteMetadata({}).validUntil,
+    documentLocale: "kr",
+    customerNote: "",
+    adminMemo: "",
+  },
+);
 
 const detail = {
   quote: {
@@ -70,10 +128,92 @@ const detail = {
 const draft = draftFromQuote(detail);
 assert.deepEqual(JSON.parse(JSON.stringify(draft)), {
   items: [
-    { cancellationNote: "", cancellationReason: "", id: "line-1", itemNote: "", preparedQuantity: 3 },
-    { cancellationNote: "", cancellationReason: "", id: "line-2", itemNote: "", preparedQuantity: 1 },
+    { cancellationNote: "", cancellationReason: "", id: "line-1", itemNote: "", preparationMarked: false, preparedQuantity: 3 },
+    { cancellationNote: "", cancellationReason: "", id: "line-2", itemNote: "", preparationMarked: false, preparedQuantity: 1 },
   ],
 });
+
+const topLevelItemsDetail = {
+  quote: { id: "quote-2", companyName: "Top level shop" },
+  items: [{ id: "line-3", requestedQuantity: 2, confirmedQuantity: 1 }],
+  pos: { state: { version: 7 } },
+};
+assert.deepEqual(
+  JSON.parse(JSON.stringify(quoteItemsFromDetail(topLevelItemsDetail))),
+  [{ id: "line-3", requestedQuantity: 2, confirmedQuantity: 1 }],
+);
+assert.deepEqual(JSON.parse(JSON.stringify(draftFromQuote(topLevelItemsDetail))), {
+  items: [
+    { cancellationNote: "", cancellationReason: "", id: "line-3", itemNote: "", preparationMarked: false, preparedQuantity: 1 },
+  ],
+});
+
+const legacyReadyDetail = {
+  quote: {
+    id: "quote-legacy-ready",
+    items: [{
+      id: "line-legacy-ready",
+      requestedQuantity: 1,
+      confirmedQuantity: 1,
+      fulfillmentStatus: "ready",
+    }],
+  },
+  pos: { state: { version: 1 } },
+};
+assert.equal(
+  draftFromQuote(legacyReadyDetail).items[0].preparationMarked,
+  false,
+);
+
+const previewedReadyDetail = {
+  quote: legacyReadyDetail.quote,
+  pos: {
+    state: {
+      version: 2,
+      lastPreview: {
+        lines: [{ itemId: "line-legacy-ready", preparedQuantity: 1 }],
+      },
+    },
+  },
+};
+assert.equal(
+  draftFromQuote(previewedReadyDetail).items[0].preparationMarked,
+  true,
+);
+
+const finalizedDetail = {
+  quote: { id: "quote-finalized" },
+  items: [{
+    id: "line-ready",
+    requestedQuantity: 2,
+    confirmedQuantity: 2,
+    fulfillmentStatus: "ready",
+  }],
+  pos: {
+    state: {
+      finalizedAt: "2026-08-06T01:00:00.000Z",
+      finalizedSnapshot: { pricing: { totalAmount: 3960, lines: [] } },
+    },
+  },
+};
+assert.equal(draftFromQuote(finalizedDetail).items[0].preparationMarked, true);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(pricingFromDetail(finalizedDetail))),
+  { totalAmount: 3960, lines: [] },
+);
+assert.equal(publicationIsCurrent(finalizedDetail), false);
+assert.equal(publicationIsCurrent({
+  pos: { state: {
+    finalizedAt: "2026-08-06T01:00:00.000Z",
+    publishedAt: "2026-08-06T01:01:00.000Z",
+  } },
+}), true);
+assert.equal(publicationIsCurrent({
+  pos: { state: {
+    finalizedAt: "2026-08-06T01:02:00.000Z",
+    publishedAt: "2026-08-06T01:01:00.000Z",
+  } },
+}), false);
 
 draft.items[0].preparedQuantity = 99;
 draft.items[1].cancellationReason = "out of stock";
@@ -82,6 +222,8 @@ assert.equal(payload.expectedVersion, 4);
 assert.equal(payload.idempotencyKey, "save:test-id");
 assert.equal(payload.items[0].preparedQuantity, 3);
 assert.equal(payload.items[1].preparedQuantity, 1);
+assert.equal(payload.documentLocale, "kr");
+assert.match(payload.validUntil, /^\d{4}-\d{2}-\d{2}$/);
 assert.equal("deductionAmount" in payload, false);
 assert.equal("overrideUnitPrice" in payload.items[0], false);
 assert.equal("overrideReason" in payload.items[1], false);
@@ -89,6 +231,15 @@ assert.equal("overrideReason" in payload.items[1], false);
 const missingCancellation = draftFromQuote(detail);
 missingCancellation.items[0].preparedQuantity = 2;
 assert.throws(() => buildWritePayload(detail, missingCancellation, "save"));
+
+const partialDraft = draftFromQuote(detail);
+partialDraft.items[0].preparedQuantity = 2;
+partialDraft.items[0].cancellationReason = "수량 부족";
+partialDraft.items[1].preparedQuantity = 2;
+assert.equal(
+  buildWritePayload(detail, partialDraft, "save").items[0].cancellationReason,
+  "quantity_shortage",
+);
 
 const receiptPayload = buildReceiptLinkPayload(detail, {
   id: "sale-1",
@@ -111,20 +262,211 @@ assert.deepEqual(JSON.parse(JSON.stringify(receiptPayload.receiptSnapshot)), {
 });
 assert.throws(() => buildReceiptLinkPayload(detail, null));
 
+const printableReceipt = buildPrintableReceipt({
+  quote: { id: "quote-print", companyName: "Sample shop" },
+  items: [{ id: "line-print", productId: "product-print", productName: "Clover", requestedQuantity: 2 }],
+  pos: {
+    state: { version: 4, finalizedAt: "2026-08-06T02:00:00.000Z" },
+    productMappings: [{
+      productId: "product-print",
+      posItemId: "pors-earring",
+      posItem: { id: "pors-earring", categoryId: "cat_earring", name: "P" },
+    }],
+  },
+}, {
+  subtotal: 3600,
+  supplyAmount: 3600,
+  vatAmount: 360,
+  totalAmount: 3960,
+  lines: [{ itemId: "line-print", preparedQuantity: 2, unitPrice: 1800, lineSubtotal: 3600 }],
+});
+assert.deepEqual(JSON.parse(JSON.stringify(printableReceipt)), {
+  id: "online_quote_quote-print",
+  source: "online_quote",
+  sourceQuoteId: "quote-print",
+  sourceQuoteVersion: 4,
+  sourceQuoteFinalizedAt: "2026-08-06T02:00:00.000Z",
+  createdAt: "2026-08-06T02:00:00.000Z",
+  customerId: null,
+  customerName: "Sample shop",
+  writerName: "웹 견적",
+  customerNote: "",
+  lines: [{ id: "line-print", name: "피어싱", quantity: 2, price: 1800 }],
+  deduction: { amount: 0, taxIncluded: false },
+  totals: {
+    subtotal: 3600,
+    discount: 0,
+    shippingFee: 0,
+    supply: 3600,
+    vat: 360,
+    total: 3960,
+    deduction: 0,
+    deductionTaxIncluded: false,
+  },
+});
+
+const firstPrintedSale = upsertOnlineQuoteSale([], printableReceipt, "2026-08-06T03:00:00.000Z");
+assert.equal(firstPrintedSale.created, true);
+assert.equal(firstPrintedSale.updated, false);
+assert.equal(firstPrintedSale.sales.length, 1);
+assert.equal(firstPrintedSale.sale.createdAt, "2026-08-06T03:00:00.000Z");
+assert.equal(firstPrintedSale.sale.registeredAt, "2026-08-06T03:00:00.000Z");
+
+const unchangedReprint = upsertOnlineQuoteSale(firstPrintedSale.sales, printableReceipt, "2026-08-06T04:00:00.000Z");
+assert.equal(unchangedReprint.changed, false);
+assert.equal(unchangedReprint.sales.length, 1);
+
+const revisedReceipt = Object.assign({}, printableReceipt, {
+  sourceQuoteVersion: 6,
+  sourceQuoteFinalizedAt: "2026-08-06T05:00:00.000Z",
+  lines: [{ id: "line-print", name: "피어싱", quantity: 1, price: 1800 }],
+  totals: Object.assign({}, printableReceipt.totals, {
+    subtotal: 1800,
+    supply: 1800,
+    vat: 180,
+    total: 1980,
+  }),
+});
+const revisedPrintedSale = upsertOnlineQuoteSale(firstPrintedSale.sales, revisedReceipt, "2026-08-06T05:10:00.000Z");
+assert.equal(revisedPrintedSale.created, false);
+assert.equal(revisedPrintedSale.updated, true);
+assert.equal(revisedPrintedSale.sales.length, 1);
+assert.equal(revisedPrintedSale.sale.createdAt, "2026-08-06T03:00:00.000Z");
+assert.equal(revisedPrintedSale.sale.totals.total, 1980);
+assert.equal(revisedPrintedSale.sale.editHistory.length, 1);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(revisedPrintedSale.sale.editHistory[0].changes)),
+  ["품목 또는 준비 수량 변경", "총액 변경"],
+);
+
+const stalePrintedSale = upsertOnlineQuoteSale(revisedPrintedSale.sales, printableReceipt, "2026-08-06T06:00:00.000Z");
+assert.equal(stalePrintedSale.stale, true);
+assert.equal(stalePrintedSale.changed, false);
+assert.equal(stalePrintedSale.sales.length, 1);
+assert.equal(stalePrintedSale.sale.totals.total, 1980);
+
 assert.equal(webBuyerLabel({ companyName: "Sample shop" }), "웹-Sample shop");
 assert.equal(webBuyerLabel({}), "웹-웹 거래처");
+assert.equal(
+  requestedQuantityFromDetail({
+    items: [
+      { requestedQuantity: 3 },
+      { quantity: 2 },
+      { requestedQuantity: 0 },
+    ],
+  }),
+  5,
+);
+assert.equal(requestedQuantityFromDetail({}), null);
+assert.equal(quoteListQuantity({ requestedQuantity: 7, itemCount: 2 }), 7);
+assert.equal(quoteListQuantity({ items: [{ requestedQuantity: 4 }] }), 4);
+assert.equal(quoteListQuantity({ itemCount: 3 }), 3);
+assert.equal(quoteListMeta({}), "웹 견적");
+assert.equal(quoteListMeta({ updatedByName: "최여진" }), "최여진");
+assert.match(quoteListMeta({ updatedAt: "2026-08-06T07:04:00.000Z" }), /^(오전|오후) \d{2}:\d{2} · 웹 견적$/);
+assert.match(source, /className: "online-quotes-refresh"/);
+assert.match(source, /"aria-label": "새로고침"/);
+assert.match(source, /className: "online-quotes-toolbar"/);
+assert.match(source, /online-quote-list-row__chevron/);
+assert.match(source, /online-quote-list-row__meta/);
+assert.match(source, /online-quote-list-row__summary/);
+assert.match(source, /"부분 준비"/);
+assert.match(source, /준비 가능한 수량을 입력하세요\./);
+assert.match(source, /online-quote-item--sold-out/);
+assert.match(source, /online-quote-item--prepared/);
+assert.match(source, /Boolean\(draft\.preparationMarked\) && prepared > 0 && !soldOut/);
+assert.match(source, /Boolean\(pricingLine\)/);
+assert.match(source, /label: "갯수", value: quantity \+ "개"/);
+assert.doesNotMatch(source, /h\("span", null, "요청 ", h\("b", null, requested\)\)/);
+assert.doesNotMatch(source, /online-quote-quantity-summary/);
+assert.match(source, /preparationMarked \? "is-active" : "is-inactive"/);
+assert.match(source, /h\("span", null, "준비"\)/);
+assert.match(source, /online-quote-quantity-stepper/);
+assert.match(source, /function previewPreparation\(itemId, patch\)/);
+assert.match(source, /writeQuote\("preview", "\/price-preview", "", nextDraft\)/);
+assert.match(source, /onPreparationSelected: previewPreparation/);
+assert.match(source, /props\.editable !== false/);
+assert.match(source, /editable: !finalized \|\| editingFinalized/);
+assert.match(source, /\(finalized && editingFinalized && !props\.dirty\)/);
+assert.match(source, /props\.dirty \|\| !finalized \|\| published/);
+assert.match(source, /onStartEditing/);
+assert.match(source, /"견적 수정"/);
+assert.match(source, /"수정 중"/);
+assert.match(source, /"견적 다시 확정"/);
+assert.match(source, /"영수증 출력"/);
+assert.match(source, /buildPrintableReceipt\(\s*detail,\s*pricing \|\| \{\},\s*props\.categories \|\| \[\]\s*\)/);
+assert.match(standaloneSource, /function registerAndPrintOnlineQuote\(receipt\)/);
+assert.match(standaloneSource, /onPrintReceipt: registerAndPrintOnlineQuote/);
+assert.match(standaloneSource, /upsertSaleDocument\(result\.sale\)/);
+assert.match(standaloneSource, /var authHook = React\.useState\(readAuth\(\)\)/);
+assert.match(standaloneSource, /if \(!authorized\) return h\("main", \{ className: "login-screen" \}/);
+assert.doesNotMatch(standaloneSource, /PORS 로그인/);
+assert.doesNotMatch(standaloneSource, /파일 직접 실행 모드/);
+assert.doesNotMatch(standaloneSource, /loginPromptOpen/);
+assert.doesNotMatch(standaloneSource, /guest-online-quote-shell/);
+assert.doesNotMatch(source, /가격 다시 계산/);
+assert.match(source, /준비 수량 1개 줄이기/);
+assert.match(source, /준비 수량 1개 늘리기/);
+assert.doesNotMatch(source, /h\("small", null, quote\.inquiryNumber/);
+assert.doesNotMatch(source, /className: "online-quote-status" }, statusLabel\(quote\)/);
+assert.doesNotMatch(source, /h\("p", null, webBuyerLabel\(quote\)\)/);
 
 assert.deepEqual(
   JSON.parse(JSON.stringify(optionPairs({ selectedOptions: [{ groupLabel: "color", valueLabel: "gold" }, { groupName: "size", valueName: "6mm" }] }))),
   [{ label: "color", value: "gold" }, { label: "size", value: "6mm" }],
 );
 assert.deepEqual(
+  JSON.parse(JSON.stringify(optionPairs({ selectedOptions: [], color: "gold", size: "6mm", barLength: "8mm" }))),
+  [{ label: "색상", value: "gold" }, { label: "바 길이", value: "8mm" }, { label: "바 길이/사이즈", value: "6mm" }],
+);
+assert.deepEqual(
   JSON.parse(JSON.stringify(groupPriceBands({ lines: [{ quantity: 2, unitPrice: 1800 }, { preparedQuantity: 3, unitPrice: 1800 }, { quantity: 1, unitPrice: 2200 }] }))),
   [{ quantity: 5, unitPrice: 1800 }, { quantity: 1, unitPrice: 2200 }],
 );
+assert.deepEqual(
+  JSON.parse(JSON.stringify(quoteReceiptLines(
+    {
+      lines: [
+        { itemId: "line-1", posItemId: "pors-silver", preparedQuantity: 2, unitPrice: 1800, lineSubtotal: 3600 },
+        { itemId: "line-2", posItemId: "pors-parts", preparedQuantity: 1, unitPrice: 500, lineSubtotal: 500 },
+        { itemId: "line-3", preparedQuantity: 1, unitPrice: 1000, lineSubtotal: 1000 },
+      ],
+    },
+    [
+      { id: "line-1", productId: "product-silver", productName: "Clover barbell" },
+      { id: "line-2", productId: "product-parts", productName: "Long parts product name" },
+      { id: "line-3", productName: "Unmapped long product name" },
+    ],
+    [
+      { productId: "product-silver", posItemId: "pors-silver", posItem: { id: "pors-silver", categoryId: "cat_silver", name: "S" } },
+      { productId: "product-parts", posItemId: "pors-parts", posItem: { id: "pors-parts", categoryId: "cat_parts", name: "부자재" } },
+    ],
+    [{ id: "cat_parts", name: "부자재" }],
+  ))),
+  [
+    { id: "line-1", name: "실버", quantity: 2, unitPrice: 1800, subtotal: 3600 },
+    { id: "line-2", name: "부자재", quantity: 1, unitPrice: 500, subtotal: 500 },
+    { id: "line-3", name: "피어싱", quantity: 1, unitPrice: 1000, subtotal: 1000 },
+  ],
+);
+assert.doesNotMatch(source, /웹 견적 · 할인 0% 고정/);
+assert.match(source, /online-quote-receipt__store/);
+assert.match(source, /h\("span", null, "번호"\)/);
+assert.match(source, /h\("dt", null, "토탈 원가"\)/);
+assert.match(source, /h\("dt", null, "총금액"\)/);
+assert.match(stylesSource, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
 assert.equal(
   resolveItemImage({ imageSet: { gallery: [{ urls: { thumb: "https://example.test/thumb.webp" } }] } }),
   "https://example.test/thumb.webp",
+);
+assert.equal(
+  resolveItemImage({ productImage: { url: "https://example.test/product.webp" } }),
+  "https://example.test/product.webp",
+);
+windowObject.PORS_NOBLESSE_API_BASE_URL = "https://noblesse.web.app/api";
+assert.equal(
+  resolveItemImage({ productImage: { url: "/storage/product.webp" } }),
+  "https://noblesse.web.app/storage/product.webp",
 );
 
 console.log("online quote workspace tests passed");

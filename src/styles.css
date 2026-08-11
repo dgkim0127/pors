@@ -4765,6 +4765,48 @@ body.native-printing .receipt-preview-page .receipt {
   gap: 8px;
 }
 
+.online-quotes-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.online-quotes-heading > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.online-quotes-heading__actions {
+  flex: 0 0 auto;
+}
+
+.online-quotes-refresh {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0;
+  background: #fff;
+  color: var(--ink);
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.online-quotes-refresh:hover {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.online-quotes-refresh:disabled {
+  opacity: 0.45;
+}
+
 .online-quotes-offline {
   margin-bottom: 12px;
   padding: 11px 14px;
@@ -4778,40 +4820,47 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quotes-list__rows {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .online-quote-list-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) auto auto auto;
-  align-items: center;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+  gap: 0;
   width: 100%;
-  min-height: 76px;
+  min-height: 132px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 11px 12px;
   background: var(--panel);
   color: var(--ink);
   text-align: left;
 }
 
 .online-quote-list-row:hover {
-  border-color: var(--green);
-  box-shadow: 0 8px 22px rgba(16, 35, 31, 0.08);
+  border-color: #cfc3ae;
+  box-shadow: 0 4px 12px rgba(76, 62, 42, 0.08);
 }
 
 .online-quote-list-row__main {
   min-width: 0;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
 }
 
-.online-quote-list-row__main strong,
-.online-quote-list-row__main span {
+.online-quote-list-row__main strong {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  line-height: 1.3;
 }
 
 .online-quote-list-row__main span,
@@ -4822,8 +4871,47 @@ body.native-printing .receipt-preview-page .receipt {
   font-weight: 800;
 }
 
-.online-quote-list-row b {
+.online-quote-list-row__meta {
+  min-width: 0;
+  margin-top: 3px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.35;
+}
+
+.online-quote-list-row__chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 18px !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.online-quote-list-row__summary {
+  align-self: end;
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+}
+
+.online-quote-list-row__quantity,
+.online-quote-list-row__price {
+  white-space: nowrap;
+}
+
+.online-quote-list-row__price {
+  color: var(--accent-strong);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.online-quote-list-row__quantity {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .online-quote-status {
@@ -4879,6 +4967,15 @@ body.native-printing .receipt-preview-page .receipt {
   grid-template-columns: minmax(280px, 1.25fr) minmax(230px, 0.8fr) minmax(260px, 0.9fr);
   gap: 16px;
   padding: 16px;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.online-quote-item--prepared {
+  border-color: #8fce75;
+  background: linear-gradient(135deg, #f8fff5 0, var(--panel) 44%);
+  box-shadow:
+    inset 0 0 0 1px #dff2d7,
+    0 0 0 2px rgba(143, 206, 117, 0.18);
 }
 
 .online-quote-item__product {
@@ -4926,10 +5023,17 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-options {
   grid-column: 2;
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 4px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   margin: 6px 0 0;
+}
+
+.online-quote-options__pair,
+.online-quote-options__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .online-quote-options dt {
@@ -4941,9 +5045,49 @@ body.native-printing .receipt-preview-page .receipt {
 .online-quote-options dd {
   min-width: 0;
   margin: 0;
-  overflow-wrap: anywhere;
+  border: 1px solid #e1dacc;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #f8f4eb;
+  color: var(--ink);
   font-size: 12px;
   font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.online-quote-options__status {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 26px;
+  padding: 0 3px;
+  color: #827b70;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.online-quote-options__status i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 999px;
+  background: #c8c2b7;
+}
+
+.online-quote-options__status.is-active {
+  color: #5d9d48;
+}
+
+.online-quote-options__status.is-active i {
+  background: #79bc5d;
+  box-shadow: 0 0 0 3px #edf9e8;
+}
+
+.online-quote-options__status.is-inactive {
+  color: #8f887d;
 }
 
 .online-quote-item__picking,
@@ -4965,7 +5109,7 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-quantity-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -5015,9 +5159,74 @@ body.native-printing .receipt-preview-page .receipt {
   resize: vertical;
 }
 
-.online-quote-quick-actions {
+.online-quote-prepared-control {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.online-quote-quantity-stepper {
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.online-quote-quantity-stepper button {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: #f4f2ed;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.online-quote-item .online-quote-quantity-stepper button:last-child {
+  color: var(--ink);
+}
+
+.online-quote-quantity-stepper button + input,
+.online-quote-quantity-stepper input + button {
+  border-left: 1px solid var(--line);
+}
+
+.online-quote-quantity-stepper input {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: center;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.online-quote-quantity-stepper button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.online-quote-quantity-stepper input:disabled {
+  color: var(--muted);
+  background: #f4f2ed;
+}
+
+.online-quote-item__quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -5028,6 +5237,42 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-item button:last-child {
   color: var(--accent-strong);
+}
+
+.online-quote-item__quick-actions button.is-selected {
+  border-color: #d5d0c6;
+  background: #e8e5df;
+  color: #827b70;
+}
+
+.online-quote-item--sold-out {
+  border-color: #aaa49b;
+  background: #dfdcd6;
+  box-shadow:
+    inset 0 0 0 1px rgba(74, 70, 65, 0.12),
+    inset 0 0 0 999px rgba(47, 51, 49, 0.035);
+}
+
+.online-quote-item--sold-out .online-quote-item__product,
+.online-quote-item--sold-out .online-quote-field {
+  opacity: 0.42;
+}
+
+.online-quote-item--sold-out .online-quote-item__product img {
+  filter: grayscale(1) brightness(0.78);
+}
+
+.online-quote-item--sold-out .online-quote-quantity-stepper,
+.online-quote-item--sold-out .online-quote-item__quick-actions button {
+  border-color: #b7b1a7;
+  background: #d4d0c9;
+  color: #756f67;
+}
+
+.online-quote-item--sold-out .online-quote-item__quick-actions button.is-selected {
+  border-color: #8f8980;
+  background: #c5c0b8;
+  color: #58534d;
 }
 
 .online-quote-mapping {
@@ -5054,36 +5299,154 @@ body.native-printing .receipt-preview-page .receipt {
 
 .online-quote-price-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.5fr);
-  gap: 18px;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #fff;
 }
 
-.online-quote-price-summary dl {
-  min-width: 0;
+.online-quote-receipt__store {
+  padding: 14px 16px 10px;
+  border-bottom: 2px dotted #8d877c;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.online-quote-receipt__lines {
+  padding: 0 16px;
+}
+
+.online-quote-receipt__columns,
+.online-quote-receipt__line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 16px;
-  margin: 0;
+  grid-template-columns: 32px minmax(0, 1fr) 48px 76px 86px;
+  gap: 8px;
+  align-items: center;
 }
 
-.online-quote-price-summary dt {
+.online-quote-receipt__columns {
+  min-height: 34px;
+  border-bottom: 1px solid #d9d4ca;
   color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.online-quote-receipt__columns span:nth-child(n + 3),
+.online-quote-receipt__line span:nth-child(n + 3),
+.online-quote-receipt__line b {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.online-quote-receipt__columns span:first-child,
+.online-quote-receipt__number {
+  text-align: center;
+}
+
+.online-quote-receipt__line {
+  min-height: 42px;
+  border-bottom: 1px dotted #d9d4ca;
+  font-size: 13px;
+}
+
+.online-quote-receipt__line strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-quote-receipt__line span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.online-quote-receipt__empty {
+  margin: 0;
+  padding: 22px 0;
+  color: var(--muted);
+  text-align: center;
   font-size: 13px;
   font-weight: 800;
 }
 
-.online-quote-price-summary dd {
+.online-quote-receipt__totals {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 16px 14px;
+  padding: 0;
+  border-top: 2px solid #27251f;
+  border-bottom: 2px solid #27251f;
+}
+
+.online-quote-receipt__totals > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 8px 4px;
+  text-align: center;
+}
+
+.online-quote-receipt__totals > div + div {
+  border-left: 1px solid #aaa59b;
+}
+
+.online-quote-receipt__totals dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.online-quote-receipt__totals dd {
   margin: 0;
-  text-align: right;
+  color: var(--ink);
+  text-align: center;
+  font-size: 13px;
   font-weight: 900;
   white-space: nowrap;
 }
 
 .online-quote-price-summary__total {
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  color: var(--accent-strong);
-  font-size: 20px;
+  color: var(--ink);
+}
+
+@media (max-width: 480px) {
+  .online-quote-receipt__columns,
+  .online-quote-receipt__line {
+    grid-template-columns: 24px minmax(0, 1fr) 34px 62px 68px;
+    gap: 4px;
+  }
+
+  .online-quote-receipt__lines {
+    padding: 0 12px;
+  }
+
+  .online-quote-receipt__totals {
+    margin: 0 12px;
+  }
+
+  .online-quote-receipt__totals > div {
+    gap: 4px;
+    padding: 7px 2px;
+  }
+
+  .online-quote-receipt__totals dt {
+    font-size: 9px;
+  }
+
+  .online-quote-receipt__totals dd {
+    font-size: 11px;
+  }
+
+  .online-quote-receipt__line {
+    font-size: 12px;
+  }
 }
 
 .online-quote-extra summary {
@@ -5180,6 +5543,12 @@ body.native-printing .receipt-preview-page .receipt {
     padding: 14px;
   }
 
+  .online-quotes-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
   .online-quotes-heading__actions,
   .online-quote-detail__header > div:last-child {
     justify-content: stretch;
@@ -5190,11 +5559,27 @@ body.native-printing .receipt-preview-page .receipt {
     flex: 1 1 120px;
   }
 
+  .online-quotes-heading__actions .online-quotes-refresh {
+    flex: 0 0 40px;
+  }
+
   .online-quote-list-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
-    min-height: 88px;
-    padding: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    min-height: 128px;
+    padding: 10px 11px;
+  }
+
+  .online-quote-list-row__main {
+    grid-column: auto;
+  }
+
+  .online-quote-list-row__quantity {
+    grid-column: auto;
+  }
+
+  .online-quote-list-row__price {
+    grid-column: auto;
   }
 
   .online-quote-list-row > small {
@@ -5280,17 +5665,31 @@ body.native-printing .receipt-preview-page .receipt {
   }
 }
 
-@media (max-width: 380px) {
-  .online-quote-quick-actions,
+@media (max-width: 430px) {
+  .online-quote-item__quick-actions,
   .online-quote-action-bar {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .online-quote-action-bar button:last-child {
-    grid-column: 1;
+    grid-column: auto;
+  }
+
+  .online-quote-item__quick-actions button,
+  .online-quote-action-bar button {
+    min-height: 44px;
+    padding: 0 4px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .online-quote-action-bar {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .online-quote-detail {
-    padding-bottom: calc(206px + var(--safe-bottom));
+    padding-bottom: calc(82px + var(--safe-bottom));
   }
 }
